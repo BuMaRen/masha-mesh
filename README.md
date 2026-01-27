@@ -1,348 +1,186 @@
-# Masha-Mesh Service Mesh
+# masha-mesh
 
-A lightweight service mesh learning project implementing Layer 4 (TCP) and Layer 7 (HTTP) proxies with a control plane for service discovery and configuration distribution.
+A lightweight service mesh for learning purposes, featuring a Kubernetes in-cluster control plane application.
+
+## Overview
+
+`masha-mesh` is an educational service mesh project that demonstrates core concepts of service mesh architecture. The control-face component is a Kubernetes-native control plane application that performs service discovery and provides an API for mesh management.
+
+## Components
+
+### control-face
+
+The control-face is a Kubernetes in-cluster application that acts as the control plane for the service mesh. It provides:
+
+- **Service Discovery**: Automatically discovers and tracks Kubernetes services and their endpoints
+- **Pod Monitoring**: Watches pod lifecycle events to maintain accurate endpoint information
+- **REST API**: HTTP API for querying service mesh state
+- **Health Checks**: Built-in health and readiness probes for Kubernetes integration
+
+## Features
+
+- ✅ In-cluster Kubernetes configuration
+- ✅ Service and endpoint discovery
+- ✅ Real-time event watching
+- ✅ RESTful API for service information
+- ✅ Health and readiness probes
+- ✅ RBAC-compliant deployment
+- ✅ Containerized deployment
+
+## Prerequisites
+
+- Go 1.20 or later
+- Docker (for building container images)
+- Kubernetes cluster (for deployment)
+- kubectl configured to access your cluster
+
+## Quick Start
+
+### Building
+
+```bash
+# Build the binary
+make build
+
+# Build Docker image
+make docker-build
+```
+
+### Deploying to Kubernetes
+
+```bash
+# Deploy control-face to your cluster
+make deploy
+
+# Check deployment status
+kubectl get pods -n masha-mesh
+
+# Check service
+kubectl get svc -n masha-mesh
+```
+
+### Testing the API
+
+Once deployed, you can access the API through the service:
+
+```bash
+# Port-forward to the service
+kubectl port-forward -n masha-mesh svc/control-face 8080:8080
+
+# Health check
+curl http://localhost:8080/healthz
+
+# List all discovered services
+curl http://localhost:8080/api/v1/services
+
+# Get specific service
+curl http://localhost:8080/api/v1/services/default/kubernetes
+```
+
+## API Endpoints
+
+- `GET /healthz` - Health check endpoint
+- `GET /readyz` - Readiness check endpoint
+- `GET /api/v1/services` - List all discovered services
+- `GET /api/v1/services/{namespace}/{name}` - Get specific service details
 
 ## Architecture
 
 ```
-┌─────────────────┐
-│  Control Plane  │
-│   :8080/:9090   │
-└────────┬────────┘
-         │ gRPC
-         │
-    ┌────┴────┐
-    │         │
-┌───▼───┐ ┌──▼────┐
-│Sidecar│ │Sidecar│
-│ :8000 │ │ :8001 │
-└───┬───┘ └───┬───┘
-    │         │
-┌───▼───┐ ┌──▼────┐
-│Backend│ │Backend│
-│ :9001 │ │ :9002 │
-└───────┘ └───────┘
+┌─────────────────────────────────────┐
+│         control-face                │
+│  ┌──────────────────────────────┐  │
+│  │   Service Controller         │  │
+│  │   - Watches Services         │  │
+│  │   - Watches Pods             │  │
+│  │   - Tracks Endpoints         │  │
+│  └──────────────────────────────┘  │
+│  ┌──────────────────────────────┐  │
+│  │   HTTP API Server            │  │
+│  │   - /api/v1/services         │  │
+│  │   - /healthz, /readyz        │  │
+│  └──────────────────────────────┘  │
+└─────────────────────────────────────┘
+            │
+            ▼
+    ┌───────────────┐
+    │  Kubernetes   │
+    │  API Server   │
+    └───────────────┘
 ```
 
-## Components
+## Development
 
-### 1. Control Plane
+### Running Locally
 
-The control plane manages service discovery and publishes configurations to sidecars.
+To run the control-face locally (requires valid kubeconfig):
 
-**Features:**
-- Service registry for tracking service endpoints
-- gRPC API for sidecars to fetch configurations
-- HTTP API for service management
-- Streaming configuration updates to sidecars
-
-**Ports:**
-- `:8080` - HTTP API (REST)
-- `:9090` - gRPC API
-
-**Endpoints:**
-- `GET /services` - List all registered services
-- `GET /health` - Health check
-
-### 2. Sidecar
-
-The sidecar proxy intercepts traffic and forwards it to backend services.
-
-**Features:**
-- L4 (TCP) proxy for transparent TCP forwarding
-- L7 (HTTP) proxy with load balancing
-- Control plane integration for dynamic configuration
-- Round-robin load balancing
-
-**Modes:**
-- `l4` - Layer 4 TCP proxy
-- `l7` - Layer 7 HTTP proxy
-
-## Getting Started
-
-### Prerequisites
-
-- Go 1.21 or higher
-- Protocol Buffers compiler (`protoc`)
-
-### Installation
-
-1. Clone the repository:
 ```bash
-git clone https://github.com/BuMaRen/masha-mesh.git
-cd masha-mesh
+# Run with default settings
+make run
+
+# Or run directly with custom flags
+go run ./cmd/control-face -v=2 -port=8080
 ```
 
-2. Install dependencies:
-```bash
-go mod download
+### Code Structure
+
+```
+.
+├── cmd/
+│   └── control-face/        # Main application entry point
+├── pkg/
+│   ├── controller/          # Kubernetes controllers
+│   └── server/              # HTTP API server
+├── deployments/             # Kubernetes manifests
+├── Dockerfile               # Container image definition
+├── Makefile                 # Build automation
+└── README.md               # This file
 ```
 
-3. Generate gRPC code (if modified):
+### Testing
+
 ```bash
-make proto
+# Run tests
+make test
+
+# Format code
+make fmt
+
+# Run vet
+make vet
 ```
 
-### Building
+## Cleanup
 
-Build all components:
-```bash
-make build
-```
-
-Or build individually:
-```bash
-make build-control-plane
-make build-sidecar
-make build-backend
-```
-
-## Usage
-
-### Running the Control Plane
+To remove the deployment from your cluster:
 
 ```bash
-./bin/control-plane
-```
-
-The control plane will start on:
-- HTTP API: `localhost:8080`
-- gRPC API: `localhost:9090`
-
-### Running a Sidecar
-
-**L4 Mode (TCP Proxy):**
-```bash
-./bin/sidecar -mode l4 -listen :8000 -target localhost:9001
-```
-
-**L7 Mode (HTTP Proxy) with Static Target:**
-```bash
-./bin/sidecar -mode l7 -listen :8000 -target localhost:9001
-```
-
-**L7 Mode with Control Plane Integration:**
-```bash
-./bin/sidecar -mode l7 -listen :8000 -enable-cp -service example-service -control-plane localhost:9090
-```
-
-### Running Example Backend Services
-
-```bash
-./bin/backend -port 9001 -name backend-1
-./bin/backend -port 9002 -name backend-2
-```
-
-## Example Scenarios
-
-### Scenario 1: Simple L7 Proxy
-
-1. Start a backend service:
-```bash
-go run examples/backend/main.go -port 9001 -name backend-1
-```
-
-2. Start sidecar proxy:
-```bash
-go run cmd/sidecar/main.go -mode l7 -listen :8000 -target localhost:9001
-```
-
-3. Test the proxy:
-```bash
-curl http://localhost:8000/
-```
-
-### Scenario 2: L7 Proxy with Control Plane
-
-1. Start the control plane:
-```bash
-go run cmd/control-plane/main.go
-```
-
-2. Start multiple backend services:
-```bash
-go run examples/backend/main.go -port 9001 -name backend-1
-go run examples/backend/main.go -port 9002 -name backend-2
-```
-
-3. Register services with control plane:
-```bash
-# The control plane automatically registers example-service with localhost:8001 and localhost:8002
-# You can view registered services:
-curl http://localhost:8080/services
-```
-
-4. Start sidecar with control plane integration:
-```bash
-go run cmd/sidecar/main.go -mode l7 -listen :8000 -enable-cp -service example-service -control-plane localhost:9090
-```
-
-5. Test load balancing:
-```bash
-curl http://localhost:8000/
-curl http://localhost:8000/
-curl http://localhost:8000/
-```
-
-Each request will be load-balanced across the registered backends.
-
-### Scenario 3: L4 TCP Proxy
-
-1. Start a TCP service (e.g., a simple HTTP server):
-```bash
-go run examples/backend/main.go -port 9001 -name backend-1
-```
-
-2. Start L4 sidecar:
-```bash
-go run cmd/sidecar/main.go -mode l4 -listen :8000 -target localhost:9001
-```
-
-3. Test the TCP proxy:
-```bash
-curl http://localhost:8000/
+make undeploy
 ```
 
 ## Configuration
 
-### Sidecar Flags
+The control-face application supports the following command-line flags:
 
-- `-mode` - Proxy mode: `l4` or `l7` (default: `l7`)
-- `-listen` - Listen address (default: `:8000`)
-- `-target` - Target address for static routing (default: `localhost:8001`)
-- `-control-plane` - Control plane address (default: `localhost:9090`)
-- `-service` - Service name for control plane lookup (default: `example-service`)
-- `-enable-cp` - Enable control plane integration (default: `false`)
+- `-port`: HTTP server port (default: 8080)
+- `-namespace`: Namespace to watch (empty for all namespaces)
+- `-v`: Log verbosity level
 
-### Backend Flags
+## RBAC Permissions
 
-- `-port` - Port to listen on (default: `8001`)
-- `-name` - Service name (default: `backend-1`)
+The control-face requires the following Kubernetes permissions:
 
-## API Reference
+- `get`, `list`, `watch` on `services`, `endpoints`, `pods`
+- `get`, `list` on `namespaces`
 
-### Control Plane gRPC API
-
-#### GetServiceConfig
-Get configuration for a service:
-```protobuf
-rpc GetServiceConfig(ServiceConfigRequest) returns (ServiceConfigResponse);
-```
-
-#### RegisterService
-Register a new service endpoint:
-```protobuf
-rpc RegisterService(ServiceRegistration) returns (RegistrationResponse);
-```
-
-#### StreamConfig
-Stream configuration updates:
-```protobuf
-rpc StreamConfig(ServiceConfigRequest) returns (stream ServiceConfigResponse);
-```
-
-### Control Plane HTTP API
-
-#### GET /services
-Returns all registered services and their endpoints.
-
-Response:
-```json
-{
-  "example-service": [
-    "localhost:8001",
-    "localhost:8002"
-  ]
-}
-```
-
-#### GET /health
-Health check endpoint.
-
-## Development
-
-### Project Structure
-
-```
-masha-mesh/
-├── cmd/
-│   ├── control-plane/    # Control plane service
-│   │   └── main.go
-│   └── sidecar/          # Sidecar proxy
-│       └── main.go
-├── pkg/
-│   ├── api/              # gRPC API definitions
-│   │   ├── control_plane.proto
-│   │   ├── control_plane.pb.go
-│   │   └── control_plane_grpc.pb.go
-│   └── proxy/            # Proxy implementations
-│       ├── l4_proxy.go   # Layer 4 TCP proxy
-│       └── l7_proxy.go   # Layer 7 HTTP proxy
-├── examples/
-│   └── backend/          # Example backend service
-│       └── main.go
-├── Makefile
-├── go.mod
-└── README.md
-```
-
-### Building from Source
-
-```bash
-# Clean build artifacts
-make clean
-
-# Build all binaries
-make build
-
-# Run tests (when available)
-make test
-```
-
-## Features
-
-### Implemented
-
-- ✅ Layer 4 (TCP) transparent proxy
-- ✅ Layer 7 (HTTP) reverse proxy
-- ✅ Control plane service discovery
-- ✅ gRPC-based control plane to sidecar communication
-- ✅ Round-robin load balancing
-- ✅ Dynamic configuration updates via streaming
-- ✅ Service registration and discovery
-
-### Future Enhancements
-
-- Circuit breaking
-- Retry logic
-- Request tracing
-- Metrics and observability
-- mTLS support
-- Advanced load balancing algorithms (least connections, weighted round-robin)
-- Health checking
+These are defined in the ClusterRole in `deployments/control-face.yaml`.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Learning Resources
-
-This project demonstrates core service mesh concepts:
-
-1. **Service Discovery**: Control plane maintains a registry of services
-2. **Traffic Management**: Sidecars intercept and route traffic
-3. **Load Balancing**: Distribute requests across multiple backends
-4. **Control Plane Pattern**: Centralized configuration management
-5. **Data Plane Pattern**: Distributed proxies handling actual traffic
+See LICENSE file for details.
 
 ## Contributing
 
-Contributions are welcome! This is a learning project, so feel free to:
-- Add new features
-- Improve existing implementations
-- Add tests
-- Enhance documentation
+This is an educational project. Contributions and improvements are welcome!
 
-## Acknowledgments
-
-This project is created for learning purposes to understand service mesh concepts and implementations.

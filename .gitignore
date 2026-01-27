@@ -18,14 +18,14 @@ vendor/
 # Go workspace file
 go.work
 
-# IDE
-.vscode/
+# IDE files
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
 

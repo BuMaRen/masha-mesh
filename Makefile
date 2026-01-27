@@ -1,82 +1,79 @@
-.PHONY: all build clean proto build-control-plane build-sidecar build-backend
+.PHONY: build clean docker-build docker-push deploy undeploy test fmt vet
 
 # Variables
-GO=go
-PROTOC=protoc
-BIN_DIR=bin
-PROTO_DIR=pkg/api
+APP_NAME = control-face
+IMAGE_NAME = control-face
+IMAGE_TAG = latest
+REGISTRY ?= localhost
 
-# Default target
-all: build
-
-# Install dependencies
-deps:
-	$(GO) mod download
-	$(GO) install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	$(GO) install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-
-# Generate protobuf code
-proto:
-	$(PROTOC) --go_out=. --go_opt=paths=source_relative \
-		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
-		$(PROTO_DIR)/control_plane.proto
-
-# Build all components
-build: build-control-plane build-sidecar build-backend
-
-# Build control-plane
-build-control-plane:
-	mkdir -p $(BIN_DIR)
-	$(GO) build -o $(BIN_DIR)/control-plane ./cmd/control-plane
-
-# Build sidecar
-build-sidecar:
-	mkdir -p $(BIN_DIR)
-	$(GO) build -o $(BIN_DIR)/sidecar ./cmd/sidecar
-
-# Build example backend
-build-backend:
-	mkdir -p $(BIN_DIR)
-	$(GO) build -o $(BIN_DIR)/backend ./examples/backend
-
-# Run control-plane
-run-control-plane: build-control-plane
-	./$(BIN_DIR)/control-plane
-
-# Run sidecar in L7 mode
-run-sidecar-l7: build-sidecar
-	./$(BIN_DIR)/sidecar -mode l7 -listen :8000 -target localhost:9001
-
-# Run sidecar in L4 mode
-run-sidecar-l4: build-sidecar
-	./$(BIN_DIR)/sidecar -mode l4 -listen :8000 -target localhost:9001
-
-# Run example backend
-run-backend: build-backend
-	./$(BIN_DIR)/backend -port 9001 -name backend-1
+# Build the binary
+build:
+	@echo "Building $(APP_NAME)..."
+	@mkdir -p bin
+	@go build -o bin/$(APP_NAME) ./cmd/$(APP_NAME)
 
 # Clean build artifacts
 clean:
-	rm -rf $(BIN_DIR)
+	@echo "Cleaning..."
+	@rm -rf bin/
+
+# Build Docker image
+docker-build:
+	@echo "Building Docker image..."
+	@docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
+
+# Push Docker image (customize REGISTRY as needed)
+docker-push: docker-build
+	@echo "Pushing Docker image..."
+	@docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
+	@docker push $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
+
+# Deploy to Kubernetes
+deploy:
+	@echo "Deploying to Kubernetes..."
+	@kubectl apply -f deployments/control-face.yaml
+
+# Remove from Kubernetes
+undeploy:
+	@echo "Removing from Kubernetes..."
+	@kubectl delete -f deployments/control-face.yaml
 
 # Run tests
 test:
-	$(GO) test -v ./...
+	@echo "Running tests..."
+	@go test -v ./...
 
 # Format code
 fmt:
-	$(GO) fmt ./...
+	@echo "Formatting code..."
+	@go fmt ./...
 
-# Run go mod tidy
+# Run vet
+vet:
+	@echo "Running go vet..."
+	@go vet ./...
+
+# Tidy dependencies
 tidy:
-	$(GO) mod tidy
+	@echo "Tidying dependencies..."
+	@go mod tidy
 
-# Build for multiple platforms
-build-all:
-	mkdir -p $(BIN_DIR)
-	GOOS=linux GOARCH=amd64 $(GO) build -o $(BIN_DIR)/control-plane-linux-amd64 ./cmd/control-plane
-	GOOS=linux GOARCH=amd64 $(GO) build -o $(BIN_DIR)/sidecar-linux-amd64 ./cmd/sidecar
-	GOOS=darwin GOARCH=amd64 $(GO) build -o $(BIN_DIR)/control-plane-darwin-amd64 ./cmd/control-plane
-	GOOS=darwin GOARCH=amd64 $(GO) build -o $(BIN_DIR)/sidecar-darwin-amd64 ./cmd/sidecar
-	GOOS=windows GOARCH=amd64 $(GO) build -o $(BIN_DIR)/control-plane-windows-amd64.exe ./cmd/control-plane
-	GOOS=windows GOARCH=amd64 $(GO) build -o $(BIN_DIR)/sidecar-windows-amd64.exe ./cmd/sidecar
+# Run locally (requires kubeconfig)
+run:
+	@echo "Running locally (requires valid kubeconfig)..."
+	@go run ./cmd/$(APP_NAME) -v=2
+
+# Show help
+help:
+	@echo "Available targets:"
+	@echo "  build         - Build the binary"
+	@echo "  clean         - Clean build artifacts"
+	@echo "  docker-build  - Build Docker image"
+	@echo "  docker-push   - Push Docker image to registry"
+	@echo "  deploy        - Deploy to Kubernetes"
+	@echo "  undeploy      - Remove from Kubernetes"
+	@echo "  test          - Run tests"
+	@echo "  fmt           - Format code"
+	@echo "  vet           - Run go vet"
+	@echo "  tidy          - Tidy dependencies"
+	@echo "  run           - Run locally"
