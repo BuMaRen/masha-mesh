@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package api;
+
+option go_package = "github.com/BuMaRen/masha-mesh/pkg/api";
+
+// ControlPlane service for managing sidecar configurations
+service ControlPlane {
+  // Get service configuration
+  rpc GetServiceConfig(ServiceConfigRequest) returns (ServiceConfigResponse);
+  
+  // Register a service
+  rpc RegisterService(ServiceRegistration) returns (RegistrationResponse);
+  
+  // Stream configuration updates
+  rpc StreamConfig(ServiceConfigRequest) returns (stream ServiceConfigResponse);
+}
+
+message ServiceConfigRequest {
+  string service_name = 1;
+}
+
+message ServiceConfigResponse {
+  string service_name = 1;
+  repeated string endpoints = 2;
+  string protocol = 3;
+}
+
+message ServiceRegistration {
+  string service_name = 1;
+  string endpoint = 2;
+}
+
+message RegistrationResponse {
+  bool success = 1;
+  string message = 2;
+}
