@@ -161,8 +161,8 @@ func main() {
 	registry := NewServiceRegistry()
 	
 	// Register some example services
-	registry.Register("example-service", "localhost:8001")
-	registry.Register("example-service", "localhost:8002")
+	registry.Register("example-service", "localhost:9001")
+	registry.Register("example-service", "localhost:9002")
 	
 	// Start gRPC server in a goroutine
 	go startGRPCServer(registry)
