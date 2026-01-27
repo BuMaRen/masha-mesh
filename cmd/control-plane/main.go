@@ -160,7 +160,8 @@ func main() {
 	
 	registry := NewServiceRegistry()
 	
-	// Register some example services
+	// Register some example services for demonstration
+	// In production, services would register themselves via the RegisterService RPC
 	registry.Register("example-service", "localhost:9001")
 	registry.Register("example-service", "localhost:9002")
 	

@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -105,56 +104,4 @@ func (p *L7Proxy) getNextBackend() *url.URL {
 	p.current = (p.current + 1) % len(p.backends)
 	
 	return backend
-}
-
-// ServeHTTP implements http.Handler for custom handling
-func (p *L7Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	backend := p.getNextBackend()
-	if backend == nil {
-		http.Error(w, "No backends available", http.StatusServiceUnavailable)
-		return
-	}
-	
-	// Create a new request to the backend
-	targetURL := *r.URL
-	targetURL.Scheme = backend.Scheme
-	targetURL.Host = backend.Host
-	
-	proxyReq, err := http.NewRequest(r.Method, targetURL.String(), r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	
-	// Copy headers
-	for key, values := range r.Header {
-		for _, value := range values {
-			proxyReq.Header.Add(key, value)
-		}
-	}
-	
-	// Add forwarding headers
-	proxyReq.Header.Set("X-Forwarded-For", r.RemoteAddr)
-	proxyReq.Header.Set("X-Forwarded-Proto", "http")
-	
-	// Send request
-	client := &http.Client{}
-	resp, err := client.Do(proxyReq)
-	if err != nil {
-		log.Printf("L7 Proxy: Error forwarding request: %v", err)
-		http.Error(w, "Bad Gateway", http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-	
-	// Copy response headers
-	for key, values := range resp.Header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
-	
-	// Copy response status and body
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
 }

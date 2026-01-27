@@ -63,14 +63,20 @@ func (p *L4Proxy) handleConnection(clientConn net.Conn) {
 	go func() {
 		defer wg.Done()
 		io.Copy(targetConn, clientConn)
-		targetConn.(*net.TCPConn).CloseWrite()
+		// Gracefully close write side if it's a TCP connection
+		if tcpConn, ok := targetConn.(*net.TCPConn); ok {
+			tcpConn.CloseWrite()
+		}
 	}()
 	
 	// Target -> Client
 	go func() {
 		defer wg.Done()
 		io.Copy(clientConn, targetConn)
-		clientConn.(*net.TCPConn).CloseWrite()
+		// Gracefully close write side if it's a TCP connection
+		if tcpConn, ok := clientConn.(*net.TCPConn); ok {
+			tcpConn.CloseWrite()
+		}
 	}()
 	
 	wg.Wait()
