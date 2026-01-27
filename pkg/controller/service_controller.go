@@ -25,14 +25,14 @@ type ServiceInfo struct {
 
 // ServiceController watches Kubernetes services and pods
 type ServiceController struct {
-	clientset *kubernetes.Clientset
+	clientset kubernetes.Interface
 	namespace string
 	services  map[string]*ServiceInfo
 	mu        sync.RWMutex
 }
 
 // NewServiceController creates a new service controller
-func NewServiceController(clientset *kubernetes.Clientset, namespace string) *ServiceController {
+func NewServiceController(clientset kubernetes.Interface, namespace string) *ServiceController {
 	return &ServiceController{
 		clientset: clientset,
 		namespace: namespace,
