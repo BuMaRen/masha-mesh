@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package mesh;
+
+option go_package = "pkg/api/mesh;mesh";
+
+message SubscribeRequest {
+    string instance_id = 1;
+    string service_name = 2;
+}
+
+message Endpoint {
+    string instance_id = 1;
+    repeated string addresses = 2;
+}
+
+message ServiceConfig {
+    int64 revision = 1;
+    string service_name = 2;
+    string version = 3;
+    repeated Endpoint endpoints = 5;
+}
+
+message UnSubscribeRequest {
+    string instance_id = 1;
+    string service_name = 2;
+}
+
+message UnSubscribeResponse {
+    string msg = 1;
+}
+
+// Controller defines the mesh controller API.
+service Controller {
+    // Subscribe to service configuration updates.
+    rpc Subscribe(SubscribeRequest) returns (stream ServiceConfig);
+
+    // UnSubscribe from service configuration updates.
+    rpc UnSubscribe(UnSubscribeRequest) returns (UnSubscribeResponse);
+}
