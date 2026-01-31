@@ -21,6 +21,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// sidecar 订阅/查询他们所需要的服务
 type SubscribeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
@@ -73,10 +74,11 @@ func (x *SubscribeRequest) GetServiceName() string {
 	return ""
 }
 
+// controller 推给 sidecar 的单个服务端口
 type Endpoint struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	Addresses     []string               `protobuf:"bytes,2,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	Ip            string                 `protobuf:"bytes,1,opt,name=ip,proto3" json:"ip,omitempty"`
+	Port          uint32                 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -111,182 +113,72 @@ func (*Endpoint) Descriptor() ([]byte, []int) {
 	return file_pkg_api_mesh_mesh_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Endpoint) GetInstanceId() string {
+func (x *Endpoint) GetIp() string {
 	if x != nil {
-		return x.InstanceId
+		return x.Ip
 	}
 	return ""
 }
 
-func (x *Endpoint) GetAddresses() []string {
+func (x *Endpoint) GetPort() uint32 {
 	if x != nil {
-		return x.Addresses
-	}
-	return nil
-}
-
-type ServiceConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Revision      int64                  `protobuf:"varint,1,opt,name=revision,proto3" json:"revision,omitempty"`
-	ServiceName   string                 `protobuf:"bytes,2,opt,name=service_name,json=serviceName,proto3" json:"service_name,omitempty"`
-	Version       string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
-	Endpoints     []*Endpoint            `protobuf:"bytes,5,rep,name=endpoints,proto3" json:"endpoints,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ServiceConfig) Reset() {
-	*x = ServiceConfig{}
-	mi := &file_pkg_api_mesh_mesh_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ServiceConfig) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ServiceConfig) ProtoMessage() {}
-
-func (x *ServiceConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_mesh_mesh_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ServiceConfig.ProtoReflect.Descriptor instead.
-func (*ServiceConfig) Descriptor() ([]byte, []int) {
-	return file_pkg_api_mesh_mesh_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *ServiceConfig) GetRevision() int64 {
-	if x != nil {
-		return x.Revision
+		return x.Port
 	}
 	return 0
 }
 
-func (x *ServiceConfig) GetServiceName() string {
+// controller 推给 sidecar 的服务信息
+type ServiceUpdate struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	OpType string                 `protobuf:"bytes,1,opt,name=op_type,json=opType,proto3" json:"op_type,omitempty"`
+	// key: endpoint_uid, value: Endpoint
+	Endpoints     map[string]*Endpoint `protobuf:"bytes,2,rep,name=endpoints,proto3" json:"endpoints,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceUpdate) Reset() {
+	*x = ServiceUpdate{}
+	mi := &file_pkg_api_mesh_mesh_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceUpdate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceUpdate) ProtoMessage() {}
+
+func (x *ServiceUpdate) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_api_mesh_mesh_proto_msgTypes[2]
 	if x != nil {
-		return x.ServiceName
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceUpdate.ProtoReflect.Descriptor instead.
+func (*ServiceUpdate) Descriptor() ([]byte, []int) {
+	return file_pkg_api_mesh_mesh_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ServiceUpdate) GetOpType() string {
+	if x != nil {
+		return x.OpType
 	}
 	return ""
 }
 
-func (x *ServiceConfig) GetVersion() string {
-	if x != nil {
-		return x.Version
-	}
-	return ""
-}
-
-func (x *ServiceConfig) GetEndpoints() []*Endpoint {
+func (x *ServiceUpdate) GetEndpoints() map[string]*Endpoint {
 	if x != nil {
 		return x.Endpoints
 	}
 	return nil
-}
-
-type UnSubscribeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	ServiceName   string                 `protobuf:"bytes,2,opt,name=service_name,json=serviceName,proto3" json:"service_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UnSubscribeRequest) Reset() {
-	*x = UnSubscribeRequest{}
-	mi := &file_pkg_api_mesh_mesh_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UnSubscribeRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UnSubscribeRequest) ProtoMessage() {}
-
-func (x *UnSubscribeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_mesh_mesh_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UnSubscribeRequest.ProtoReflect.Descriptor instead.
-func (*UnSubscribeRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_api_mesh_mesh_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *UnSubscribeRequest) GetInstanceId() string {
-	if x != nil {
-		return x.InstanceId
-	}
-	return ""
-}
-
-func (x *UnSubscribeRequest) GetServiceName() string {
-	if x != nil {
-		return x.ServiceName
-	}
-	return ""
-}
-
-type UnSubscribeResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Msg           string                 `protobuf:"bytes,1,opt,name=msg,proto3" json:"msg,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UnSubscribeResponse) Reset() {
-	*x = UnSubscribeResponse{}
-	mi := &file_pkg_api_mesh_mesh_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UnSubscribeResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UnSubscribeResponse) ProtoMessage() {}
-
-func (x *UnSubscribeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_mesh_mesh_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UnSubscribeResponse.ProtoReflect.Descriptor instead.
-func (*UnSubscribeResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_api_mesh_mesh_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *UnSubscribeResponse) GetMsg() string {
-	if x != nil {
-		return x.Msg
-	}
-	return ""
 }
 
 var File_pkg_api_mesh_mesh_proto protoreflect.FileDescriptor
@@ -297,26 +189,21 @@ const file_pkg_api_mesh_mesh_proto_rawDesc = "" +
 	"\x10SubscribeRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12!\n" +
-	"\fservice_name\x18\x02 \x01(\tR\vserviceName\"I\n" +
-	"\bEndpoint\x12\x1f\n" +
-	"\vinstance_id\x18\x01 \x01(\tR\n" +
-	"instanceId\x12\x1c\n" +
-	"\taddresses\x18\x02 \x03(\tR\taddresses\"\x96\x01\n" +
-	"\rServiceConfig\x12\x1a\n" +
-	"\brevision\x18\x01 \x01(\x03R\brevision\x12!\n" +
-	"\fservice_name\x18\x02 \x01(\tR\vserviceName\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\tR\aversion\x12,\n" +
-	"\tendpoints\x18\x05 \x03(\v2\x0e.mesh.EndpointR\tendpoints\"X\n" +
-	"\x12UnSubscribeRequest\x12\x1f\n" +
-	"\vinstance_id\x18\x01 \x01(\tR\n" +
-	"instanceId\x12!\n" +
-	"\fservice_name\x18\x02 \x01(\tR\vserviceName\"'\n" +
-	"\x13UnSubscribeResponse\x12\x10\n" +
-	"\x03msg\x18\x01 \x01(\tR\x03msg2\x8c\x01\n" +
+	"\fservice_name\x18\x02 \x01(\tR\vserviceName\".\n" +
+	"\bEndpoint\x12\x0e\n" +
+	"\x02ip\x18\x01 \x01(\tR\x02ip\x12\x12\n" +
+	"\x04port\x18\x02 \x01(\rR\x04port\"\xb8\x01\n" +
+	"\rServiceUpdate\x12\x17\n" +
+	"\aop_type\x18\x01 \x01(\tR\x06opType\x12@\n" +
+	"\tendpoints\x18\x02 \x03(\v2\".mesh.ServiceUpdate.EndpointsEntryR\tendpoints\x1aL\n" +
+	"\x0eEndpointsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12$\n" +
+	"\x05value\x18\x02 \x01(\v2\x0e.mesh.EndpointR\x05value:\x028\x012\xc0\x01\n" +
+	"\vControlFace\x12:\n" +
+	"\tSubscribe\x12\x16.mesh.SubscribeRequest\x1a\x13.mesh.ServiceUpdate0\x01\x129\n" +
 	"\n" +
-	"Controller\x12:\n" +
-	"\tSubscribe\x12\x16.mesh.SubscribeRequest\x1a\x13.mesh.ServiceConfig0\x01\x12B\n" +
-	"\vUnSubscribe\x12\x18.mesh.UnSubscribeRequest\x1a\x19.mesh.UnSubscribeResponseB\x13Z\x11pkg/api/mesh;meshb\x06proto3"
+	"Unsubsribe\x12\x16.mesh.SubscribeRequest\x1a\x13.mesh.ServiceUpdate\x12:\n" +
+	"\vListService\x12\x16.mesh.SubscribeRequest\x1a\x13.mesh.ServiceUpdateB\x13Z\x11pkg/api/mesh;meshb\x06proto3"
 
 var (
 	file_pkg_api_mesh_mesh_proto_rawDescOnce sync.Once
@@ -330,25 +217,27 @@ func file_pkg_api_mesh_mesh_proto_rawDescGZIP() []byte {
 	return file_pkg_api_mesh_mesh_proto_rawDescData
 }
 
-var file_pkg_api_mesh_mesh_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_pkg_api_mesh_mesh_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_pkg_api_mesh_mesh_proto_goTypes = []any{
-	(*SubscribeRequest)(nil),    // 0: mesh.SubscribeRequest
-	(*Endpoint)(nil),            // 1: mesh.Endpoint
-	(*ServiceConfig)(nil),       // 2: mesh.ServiceConfig
-	(*UnSubscribeRequest)(nil),  // 3: mesh.UnSubscribeRequest
-	(*UnSubscribeResponse)(nil), // 4: mesh.UnSubscribeResponse
+	(*SubscribeRequest)(nil), // 0: mesh.SubscribeRequest
+	(*Endpoint)(nil),         // 1: mesh.Endpoint
+	(*ServiceUpdate)(nil),    // 2: mesh.ServiceUpdate
+	nil,                      // 3: mesh.ServiceUpdate.EndpointsEntry
 }
 var file_pkg_api_mesh_mesh_proto_depIdxs = []int32{
-	1, // 0: mesh.ServiceConfig.endpoints:type_name -> mesh.Endpoint
-	0, // 1: mesh.Controller.Subscribe:input_type -> mesh.SubscribeRequest
-	3, // 2: mesh.Controller.UnSubscribe:input_type -> mesh.UnSubscribeRequest
-	2, // 3: mesh.Controller.Subscribe:output_type -> mesh.ServiceConfig
-	4, // 4: mesh.Controller.UnSubscribe:output_type -> mesh.UnSubscribeResponse
-	3, // [3:5] is the sub-list for method output_type
-	1, // [1:3] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	3, // 0: mesh.ServiceUpdate.endpoints:type_name -> mesh.ServiceUpdate.EndpointsEntry
+	1, // 1: mesh.ServiceUpdate.EndpointsEntry.value:type_name -> mesh.Endpoint
+	0, // 2: mesh.ControlFace.Subscribe:input_type -> mesh.SubscribeRequest
+	0, // 3: mesh.ControlFace.Unsubsribe:input_type -> mesh.SubscribeRequest
+	0, // 4: mesh.ControlFace.ListService:input_type -> mesh.SubscribeRequest
+	2, // 5: mesh.ControlFace.Subscribe:output_type -> mesh.ServiceUpdate
+	2, // 6: mesh.ControlFace.Unsubsribe:output_type -> mesh.ServiceUpdate
+	2, // 7: mesh.ControlFace.ListService:output_type -> mesh.ServiceUpdate
+	5, // [5:8] is the sub-list for method output_type
+	2, // [2:5] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_pkg_api_mesh_mesh_proto_init() }
@@ -362,7 +251,7 @@ func file_pkg_api_mesh_mesh_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_api_mesh_mesh_proto_rawDesc), len(file_pkg_api_mesh_mesh_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

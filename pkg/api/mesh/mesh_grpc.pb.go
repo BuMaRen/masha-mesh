@@ -19,37 +19,40 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Controller_Subscribe_FullMethodName   = "/mesh.Controller/Subscribe"
-	Controller_UnSubscribe_FullMethodName = "/mesh.Controller/UnSubscribe"
+	ControlFace_Subscribe_FullMethodName   = "/mesh.ControlFace/Subscribe"
+	ControlFace_Unsubsribe_FullMethodName  = "/mesh.ControlFace/Unsubsribe"
+	ControlFace_ListService_FullMethodName = "/mesh.ControlFace/ListService"
 )
 
-// ControllerClient is the client API for Controller service.
+// ControlFaceClient is the client API for ControlFace service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Controller defines the mesh controller API.
-type ControllerClient interface {
-	// Subscribe to service configuration updates.
-	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ServiceConfig], error)
-	// UnSubscribe from service configuration updates.
-	UnSubscribe(ctx context.Context, in *UnSubscribeRequest, opts ...grpc.CallOption) (*UnSubscribeResponse, error)
+// 控制面提供给 sidecar 的服务
+type ControlFaceClient interface {
+	// sidecar 订阅某个服务的更新
+	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ServiceUpdate], error)
+	// sidecar 取消订阅某个服务的更新
+	Unsubsribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*ServiceUpdate, error)
+	// sidecar 查询某个服务的当前状态
+	ListService(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*ServiceUpdate, error)
 }
 
-type controllerClient struct {
+type controlFaceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewControllerClient(cc grpc.ClientConnInterface) ControllerClient {
-	return &controllerClient{cc}
+func NewControlFaceClient(cc grpc.ClientConnInterface) ControlFaceClient {
+	return &controlFaceClient{cc}
 }
 
-func (c *controllerClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ServiceConfig], error) {
+func (c *controlFaceClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ServiceUpdate], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Controller_ServiceDesc.Streams[0], Controller_Subscribe_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &ControlFace_ServiceDesc.Streams[0], ControlFace_Subscribe_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[SubscribeRequest, ServiceConfig]{ClientStream: stream}
+	x := &grpc.GenericClientStream[SubscribeRequest, ServiceUpdate]{ClientStream: stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -60,110 +63,147 @@ func (c *controllerClient) Subscribe(ctx context.Context, in *SubscribeRequest, 
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Controller_SubscribeClient = grpc.ServerStreamingClient[ServiceConfig]
+type ControlFace_SubscribeClient = grpc.ServerStreamingClient[ServiceUpdate]
 
-func (c *controllerClient) UnSubscribe(ctx context.Context, in *UnSubscribeRequest, opts ...grpc.CallOption) (*UnSubscribeResponse, error) {
+func (c *controlFaceClient) Unsubsribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*ServiceUpdate, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UnSubscribeResponse)
-	err := c.cc.Invoke(ctx, Controller_UnSubscribe_FullMethodName, in, out, cOpts...)
+	out := new(ServiceUpdate)
+	err := c.cc.Invoke(ctx, ControlFace_Unsubsribe_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// ControllerServer is the server API for Controller service.
-// All implementations must embed UnimplementedControllerServer
-// for forward compatibility.
-//
-// Controller defines the mesh controller API.
-type ControllerServer interface {
-	// Subscribe to service configuration updates.
-	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[ServiceConfig]) error
-	// UnSubscribe from service configuration updates.
-	UnSubscribe(context.Context, *UnSubscribeRequest) (*UnSubscribeResponse, error)
-	mustEmbedUnimplementedControllerServer()
+func (c *controlFaceClient) ListService(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*ServiceUpdate, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ServiceUpdate)
+	err := c.cc.Invoke(ctx, ControlFace_ListService_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
-// UnimplementedControllerServer must be embedded to have
+// ControlFaceServer is the server API for ControlFace service.
+// All implementations must embed UnimplementedControlFaceServer
+// for forward compatibility.
+//
+// 控制面提供给 sidecar 的服务
+type ControlFaceServer interface {
+	// sidecar 订阅某个服务的更新
+	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[ServiceUpdate]) error
+	// sidecar 取消订阅某个服务的更新
+	Unsubsribe(context.Context, *SubscribeRequest) (*ServiceUpdate, error)
+	// sidecar 查询某个服务的当前状态
+	ListService(context.Context, *SubscribeRequest) (*ServiceUpdate, error)
+	mustEmbedUnimplementedControlFaceServer()
+}
+
+// UnimplementedControlFaceServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedControllerServer struct{}
+type UnimplementedControlFaceServer struct{}
 
-func (UnimplementedControllerServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[ServiceConfig]) error {
+func (UnimplementedControlFaceServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[ServiceUpdate]) error {
 	return status.Error(codes.Unimplemented, "method Subscribe not implemented")
 }
-func (UnimplementedControllerServer) UnSubscribe(context.Context, *UnSubscribeRequest) (*UnSubscribeResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method UnSubscribe not implemented")
+func (UnimplementedControlFaceServer) Unsubsribe(context.Context, *SubscribeRequest) (*ServiceUpdate, error) {
+	return nil, status.Error(codes.Unimplemented, "method Unsubsribe not implemented")
 }
-func (UnimplementedControllerServer) mustEmbedUnimplementedControllerServer() {}
-func (UnimplementedControllerServer) testEmbeddedByValue()                    {}
+func (UnimplementedControlFaceServer) ListService(context.Context, *SubscribeRequest) (*ServiceUpdate, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListService not implemented")
+}
+func (UnimplementedControlFaceServer) mustEmbedUnimplementedControlFaceServer() {}
+func (UnimplementedControlFaceServer) testEmbeddedByValue()                     {}
 
-// UnsafeControllerServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to ControllerServer will
+// UnsafeControlFaceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ControlFaceServer will
 // result in compilation errors.
-type UnsafeControllerServer interface {
-	mustEmbedUnimplementedControllerServer()
+type UnsafeControlFaceServer interface {
+	mustEmbedUnimplementedControlFaceServer()
 }
 
-func RegisterControllerServer(s grpc.ServiceRegistrar, srv ControllerServer) {
-	// If the following call panics, it indicates UnimplementedControllerServer was
+func RegisterControlFaceServer(s grpc.ServiceRegistrar, srv ControlFaceServer) {
+	// If the following call panics, it indicates UnimplementedControlFaceServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&Controller_ServiceDesc, srv)
+	s.RegisterService(&ControlFace_ServiceDesc, srv)
 }
 
-func _Controller_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
+func _ControlFace_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SubscribeRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(ControllerServer).Subscribe(m, &grpc.GenericServerStream[SubscribeRequest, ServiceConfig]{ServerStream: stream})
+	return srv.(ControlFaceServer).Subscribe(m, &grpc.GenericServerStream[SubscribeRequest, ServiceUpdate]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Controller_SubscribeServer = grpc.ServerStreamingServer[ServiceConfig]
+type ControlFace_SubscribeServer = grpc.ServerStreamingServer[ServiceUpdate]
 
-func _Controller_UnSubscribe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UnSubscribeRequest)
+func _ControlFace_Unsubsribe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubscribeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ControllerServer).UnSubscribe(ctx, in)
+		return srv.(ControlFaceServer).Unsubsribe(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Controller_UnSubscribe_FullMethodName,
+		FullMethod: ControlFace_Unsubsribe_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ControllerServer).UnSubscribe(ctx, req.(*UnSubscribeRequest))
+		return srv.(ControlFaceServer).Unsubsribe(ctx, req.(*SubscribeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// Controller_ServiceDesc is the grpc.ServiceDesc for Controller service.
+func _ControlFace_ListService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubscribeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlFaceServer).ListService(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ControlFace_ListService_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlFaceServer).ListService(ctx, req.(*SubscribeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ControlFace_ServiceDesc is the grpc.ServiceDesc for ControlFace service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Controller_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "mesh.Controller",
-	HandlerType: (*ControllerServer)(nil),
+var ControlFace_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "mesh.ControlFace",
+	HandlerType: (*ControlFaceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "UnSubscribe",
-			Handler:    _Controller_UnSubscribe_Handler,
+			MethodName: "Unsubsribe",
+			Handler:    _ControlFace_Unsubsribe_Handler,
+		},
+		{
+			MethodName: "ListService",
+			Handler:    _ControlFace_ListService_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "Subscribe",
-			Handler:       _Controller_Subscribe_Handler,
+			Handler:       _ControlFace_Subscribe_Handler,
 			ServerStreams: true,
 		},
 	},
