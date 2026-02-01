@@ -19,8 +19,9 @@ message Endpoint {
 // controller 推给 sidecar 的服务信息
 message ServiceUpdate {
     string op_type = 1;
+    int64 revision = 2;
     // key: endpoint_uid, value: Endpoint
-    map<string, Endpoint> endpoints = 2;
+    map<string, Endpoint> endpoints = 3;
 }
 
 // 控制面提供给 sidecar 的服务

@@ -129,10 +129,11 @@ func (x *Endpoint) GetPort() uint32 {
 
 // controller 推给 sidecar 的服务信息
 type ServiceUpdate struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	OpType string                 `protobuf:"bytes,1,opt,name=op_type,json=opType,proto3" json:"op_type,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	OpType   string                 `protobuf:"bytes,1,opt,name=op_type,json=opType,proto3" json:"op_type,omitempty"`
+	Revision int64                  `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"`
 	// key: endpoint_uid, value: Endpoint
-	Endpoints     map[string]*Endpoint `protobuf:"bytes,2,rep,name=endpoints,proto3" json:"endpoints,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Endpoints     map[string]*Endpoint `protobuf:"bytes,3,rep,name=endpoints,proto3" json:"endpoints,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -174,6 +175,13 @@ func (x *ServiceUpdate) GetOpType() string {
 	return ""
 }
 
+func (x *ServiceUpdate) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
 func (x *ServiceUpdate) GetEndpoints() map[string]*Endpoint {
 	if x != nil {
 		return x.Endpoints
@@ -192,10 +200,11 @@ const file_pkg_api_mesh_mesh_proto_rawDesc = "" +
 	"\fservice_name\x18\x02 \x01(\tR\vserviceName\".\n" +
 	"\bEndpoint\x12\x0e\n" +
 	"\x02ip\x18\x01 \x01(\tR\x02ip\x12\x12\n" +
-	"\x04port\x18\x02 \x01(\rR\x04port\"\xb8\x01\n" +
+	"\x04port\x18\x02 \x01(\rR\x04port\"\xd4\x01\n" +
 	"\rServiceUpdate\x12\x17\n" +
-	"\aop_type\x18\x01 \x01(\tR\x06opType\x12@\n" +
-	"\tendpoints\x18\x02 \x03(\v2\".mesh.ServiceUpdate.EndpointsEntryR\tendpoints\x1aL\n" +
+	"\aop_type\x18\x01 \x01(\tR\x06opType\x12\x1a\n" +
+	"\brevision\x18\x02 \x01(\x03R\brevision\x12@\n" +
+	"\tendpoints\x18\x03 \x03(\v2\".mesh.ServiceUpdate.EndpointsEntryR\tendpoints\x1aL\n" +
 	"\x0eEndpointsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12$\n" +
 	"\x05value\x18\x02 \x01(\v2\x0e.mesh.EndpointR\x05value:\x028\x012\xc0\x01\n" +
