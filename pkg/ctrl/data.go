@@ -17,9 +17,18 @@ type EndpointSliceMap struct {
 	informers map[ServiceName]informer
 }
 
+func (e *EndpointSliceMap) DelInformer(serviceName ServiceName) {
+	delete(e.informers, serviceName)
+}
+
+func (e *EndpointSliceMap) AddInformer(serviceName ServiceName, fn informer) {
+	e.informers[serviceName] = fn
+}
+
 func (e *EndpointSliceMap) OnUpdate(event *watch.Event) {
 	endpointSlice, ok := event.Object.(*discoveryv1.EndpointSlice)
 	if !ok {
+		fmt.Printf("event is not endpointSlice")
 		return
 	}
 
@@ -28,14 +37,14 @@ func (e *EndpointSliceMap) OnUpdate(event *watch.Event) {
 	case watch.Added, watch.Modified:
 		e.esm[serviceName] = endpointSlice
 	case watch.Deleted:
-		e.esm[serviceName] = endpointSlice
+		delete(e.esm, serviceName)
 	default:
 		fmt.Printf("[EndpointSliceMap] unknown event type: %v\n", event.Type)
 		return
 	}
 	e.revision++
 	if fn, exists := e.informers[serviceName]; exists {
-		fn(e.revision, event.Type, endpointSlice.DeepCopy())
+		go fn(e.revision, event.Type, endpointSlice.DeepCopy())
 	}
 }
 
