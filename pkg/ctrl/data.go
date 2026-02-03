@@ -2,6 +2,7 @@ package ctrl
 
 import (
 	"fmt"
+	"sync"
 
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/watch"
@@ -9,20 +10,29 @@ import (
 
 type ServiceName string
 
-type informer func(int64, watch.EventType, *discoveryv1.EndpointSlice)
+type broadcaster func(int64, watch.EventType, *discoveryv1.EndpointSlice)
 
 type EndpointSliceMap struct {
-	revision  int64
-	esm       map[ServiceName]*discoveryv1.EndpointSlice
-	informers map[ServiceName]informer
+	revision     int64
+	mtx          *sync.RWMutex
+	esm          map[ServiceName]*discoveryv1.EndpointSlice
+	broadcasters map[ServiceName]broadcaster
 }
 
-func (e *EndpointSliceMap) DelInformer(serviceName ServiceName) {
-	delete(e.informers, serviceName)
+func (e *EndpointSliceMap) DelBroadcast(serviceName ServiceName) {
+	e.mtx.Lock()
+	fmt.Printf("[EndpointSliceMap][DelBroadcast] Lock acquired for service %v deletion\n", serviceName)
+	delete(e.broadcasters, serviceName)
+	e.mtx.Unlock()
+	fmt.Printf("[EndpointSliceMap][DelBroadcast] Lock released after service %v deletion\n", serviceName)
 }
 
-func (e *EndpointSliceMap) AddInformer(serviceName ServiceName, fn informer) {
-	e.informers[serviceName] = fn
+func (e *EndpointSliceMap) AddBroadcast(serviceName ServiceName, fn broadcaster) {
+	e.mtx.Lock()
+	fmt.Printf("[EndpointSliceMap][AddBroadcast] Lock acquired for service %v addition\n", serviceName)
+	e.broadcasters[serviceName] = fn
+	e.mtx.Unlock()
+	fmt.Printf("[EndpointSliceMap][AddBroadcast] Lock released after service %v addition\n", serviceName)
 }
 
 func (e *EndpointSliceMap) OnUpdate(event *watch.Event) {
@@ -33,9 +43,16 @@ func (e *EndpointSliceMap) OnUpdate(event *watch.Event) {
 	}
 
 	serviceName := ServiceName(endpointSlice.Labels["kubernetes.io/service-name"])
+	es := endpointSlice.DeepCopy()
+	e.mtx.Lock()
+	fmt.Printf("[EndpointSliceMap][OnUpdate] Lock acquired for service %v update\n", serviceName)
+	defer func() {
+		e.mtx.Unlock()
+		fmt.Printf("[EndpointSliceMap][OnUpdate] Lock released after service %v update\n", serviceName)
+	}()
 	switch event.Type {
 	case watch.Added, watch.Modified:
-		e.esm[serviceName] = endpointSlice
+		e.esm[serviceName] = es
 	case watch.Deleted:
 		delete(e.esm, serviceName)
 	default:
@@ -43,30 +60,17 @@ func (e *EndpointSliceMap) OnUpdate(event *watch.Event) {
 		return
 	}
 	e.revision++
-	if fn, exists := e.informers[serviceName]; exists {
-		go fn(e.revision, event.Type, endpointSlice.DeepCopy())
+	if fn, exists := e.broadcasters[serviceName]; exists {
+		fmt.Printf("[EndpointSliceMap][OnUpdate] start a braodcast for service %v\n", serviceName)
+		go fn(e.revision, event.Type, es)
 	}
 }
 
-// mashazheng@Mashas-Air ~ % kubectl get endpointslice kubernetes -o yaml
-// addressType: IPv4
-// apiVersion: discovery.k8s.io/v1
-// endpoints:
-// - addresses:
-//   - 192.168.49.2
-//   conditions:
-//     ready: true
-// kind: EndpointSlice
-// metadata:
-//   creationTimestamp: "2026-02-02T17:24:23Z"
-//   generation: 1
-//   labels:
-//     kubernetes.io/service-name: kubernetes
-//   name: kubernetes
-//   namespace: default
-//   resourceVersion: "205"
-//   uid: b0328611-f51f-45c9-951b-9a857cd73def
-// ports:
-// - name: https
-//   port: 8443
-//   protocol: TCP
+func NewEndpointSliceMap() *EndpointSliceMap {
+	return &EndpointSliceMap{
+		revision:     0,
+		mtx:          &sync.RWMutex{},
+		esm:          make(map[ServiceName]*discoveryv1.EndpointSlice),
+		broadcasters: make(map[ServiceName]broadcaster),
+	}
+}

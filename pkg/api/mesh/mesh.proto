@@ -4,32 +4,29 @@ package mesh;
 
 option go_package = "pkg/api/mesh;mesh";
 
-// sidecar 订阅/查询他们所需要的服务
-message SubscribeRequest {
-    string instance_id = 1;
+enum OpType {
+  ADDED = 0;
+  DELETED = 1;
+  MODIFIED = 2;
+}
+
+message EndpointIPs{
+    repeated string endpoint_ips = 1;
+}
+
+message ClientSubscriptionEvent {
+    int64 revision = 1;
+    OpType op_type = 2;
+    map<string, EndpointIPs> endpoints = 3;
+}
+
+message SubscriptionRequest {
+    string sidecar_id = 1;
     string service_name = 2;
 }
 
-// controller 推给 sidecar 的单个服务端口
-message Endpoint {
-    string ip = 1;
-    uint32 port = 2;
-}
-
-// controller 推给 sidecar 的服务信息
-message ServiceUpdate {
-    string op_type = 1;
-    int64 revision = 2;
-    // key: endpoint_uid, value: Endpoint
-    map<string, Endpoint> endpoints = 3;
-}
-
-// 控制面提供给 sidecar 的服务
-service ControlFace {
-    // sidecar 订阅某个服务的更新
-    rpc Subscribe(SubscribeRequest) returns (stream ServiceUpdate);
-    // sidecar 取消订阅某个服务的更新
-    rpc Unsubsribe(SubscribeRequest) returns (ServiceUpdate);
-    // sidecar 查询某个服务的当前状态
-    rpc ListService(SubscribeRequest) returns (ServiceUpdate);
+// control face of my mesh
+service MeshCtrl {
+    // for client's subscription
+    rpc Subscribe(SubscriptionRequest) returns (stream ClientSubscriptionEvent);
 }

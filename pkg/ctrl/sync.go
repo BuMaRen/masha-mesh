@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/BuMaRen/mesh/pkg/ctrl/mesh"
+	"github.com/BuMaRen/mesh/pkg/api/mesh"
 	"google.golang.org/grpc"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/watch"
@@ -31,10 +31,11 @@ func newClientSubscriptionEvent(revision int64, opType mesh.OpType, es *discover
 type SidecarID string
 type SidecarChannel chan *mesh.ClientSubscriptionEvent
 
+const cacheCapacity = 100
+
 // 一个 ServiceSubscription 表示一个 Service 的订阅
 type ServiceSubscription struct {
-	// 确保 remove 在关闭 channel 的时候没有 informer 在写
-	publishMtx sync.RWMutex
+	channelCapacity int
 	// 确保 clients 修改的并发安全
 	serviceMtx sync.RWMutex
 	clients    map[SidecarID]SidecarChannel
@@ -42,22 +43,33 @@ type ServiceSubscription struct {
 
 func newServiceSubscription() *ServiceSubscription {
 	return &ServiceSubscription{
-		serviceMtx: sync.RWMutex{},
-		clients:    make(map[SidecarID]SidecarChannel),
+		channelCapacity: cacheCapacity,
+		serviceMtx:      sync.RWMutex{},
+		clients:         make(map[SidecarID]SidecarChannel),
 	}
 }
 
+// 新增 SidecarChannel 的时候上锁，不允许推送和删除
 func (s *ServiceSubscription) newSidecarChannel(sidecarID SidecarID) SidecarChannel {
-	ch := make(SidecarChannel, 100)
+	ch := make(SidecarChannel, s.channelCapacity)
 	s.serviceMtx.Lock()
+	fmt.Printf("[ServiceSubscription][newSidecarChannel] Lock acquired for sidecar %v addition\n", sidecarID)
+	defer func() {
+		s.serviceMtx.Unlock()
+		fmt.Printf("[ServiceSubscription][newSidecarChannel] Lock released after sidecar %v addition\n", sidecarID)
+	}()
 	s.clients[sidecarID] = ch
-	s.serviceMtx.Unlock()
 	return ch
 }
 
+// 删除 SidecarChannel 的时候上锁，不允许推送和新增
 func (s *ServiceSubscription) removeSidecarChannel(sidecarID SidecarID) int {
 	s.serviceMtx.Lock()
-	defer s.serviceMtx.Unlock()
+	fmt.Printf("[ServiceSubscription][removeSidecarChannel] Lock acquired for sidecar %v removal\n", sidecarID)
+	defer func() {
+		s.serviceMtx.Unlock()
+		fmt.Printf("[ServiceSubscription][removeSidecarChannel] Lock released after sidecar %v removal\n", sidecarID)
+	}()
 	if ch, ok := s.clients[sidecarID]; ok {
 		close(ch)
 	}
@@ -66,8 +78,9 @@ func (s *ServiceSubscription) removeSidecarChannel(sidecarID SidecarID) int {
 	return length
 }
 
-// 作为 informer 注册到 data 里
-func (s *ServiceSubscription) Publish(revision int64, et watch.EventType, es *discoveryv1.EndpointSlice) {
+// data 在调用 publish 时候会起一个新的 goroutine
+// publish 在推送事件的时候不允许修改 clients 列表
+func (s *ServiceSubscription) publish(revision int64, et watch.EventType, es *discoveryv1.EndpointSlice) {
 	var opType mesh.OpType
 	switch et {
 	case watch.Added:
@@ -79,42 +92,50 @@ func (s *ServiceSubscription) Publish(revision int64, et watch.EventType, es *di
 	}
 	event := newClientSubscriptionEvent(revision, opType, es)
 	fmt.Printf("start publish update event, revision(%v)\n", revision)
+	// 不用拷贝 clients，防止另一个 goroutine 调用 removeSidecarChannel 关闭 channel 导致 panic
 	s.serviceMtx.Lock()
+	fmt.Printf("[ServiceSubscription][publish] Lock acquired for publishing revision %v\n", revision)
 	for _, ch := range s.clients {
 		ch <- event
 	}
 	s.serviceMtx.Unlock()
-	fmt.Printf("update event published, revision(%v)\n", revision)
+	fmt.Printf("[ServiceSubscription][publish] Lock released after publishing revision %v\n", revision)
 }
 
-type Informer interface {
-	AddInformer(ServiceName, informer)
-	DelInformer(ServiceName)
+type Storage interface {
+	DelBroadcast(ServiceName)
+	AddBroadcast(ServiceName, broadcaster)
 }
 
 type Sync struct {
 	mtx           sync.RWMutex
-	informer      Informer
+	storage       Storage
 	subscriptions map[ServiceName]*ServiceSubscription
 	mesh.UnimplementedMeshCtrlServer
 }
 
-func NewSync(informer Informer) *Sync {
+func NewSync(storage Storage) *Sync {
 	return &Sync{
 		mtx:           sync.RWMutex{},
-		informer:      informer,
+		storage:       storage,
 		subscriptions: make(map[ServiceName]*ServiceSubscription),
 	}
 }
 
+// 需要订阅新的 Service，整个 Sync 加锁，阻塞各个 goroutine 中的 delete
 func (s *Sync) ServiceSubscriptionOrNew(serviceName ServiceName) *ServiceSubscription {
 	s.mtx.Lock()
-	defer s.mtx.Unlock()
+	fmt.Printf("[Sync][ServiceSubscriptionOrNew] Lock acquired for service %v\n", serviceName)
+	defer func() {
+		s.mtx.Unlock()
+		fmt.Printf("[Sync][ServiceSubscriptionOrNew] Lock released for service %v\n", serviceName)
+	}()
 	svcSub, exist := s.subscriptions[serviceName]
 	if !exist {
 		s.subscriptions[serviceName] = newServiceSubscription()
 		svcSub = s.subscriptions[serviceName]
-		s.informer.AddInformer(serviceName, svcSub.Publish)
+		// 涉及 storage 中的锁
+		s.storage.AddBroadcast(serviceName, svcSub.publish)
 	}
 	return svcSub
 }
@@ -126,25 +147,33 @@ func (s *Sync) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStreamingS
 	defer func() {
 		// 删除 sidecar 的通道后如果服务为空
 		if remain := svcSub.removeSidecarChannel(SidecarID(sr.SidecarId)); remain == 0 {
-			s.informer.DelInformer(svcName)
+			s.storage.DelBroadcast(svcName)
 			s.mtx.Lock()
+			fmt.Printf("[Sync][Subscribe] Lock acquired for service %v deletion\n", svcName)
 			delete(s.subscriptions, svcName)
 			s.mtx.Unlock()
+			fmt.Printf("[Sync][Subscribe] Lock released for service %v deletion\n", svcName)
 		}
 	}()
 	fmt.Printf("start streaming message to sidecar %v...\n", sr.SidecarId)
-	for {
-		event, readable := <-recvCh
-		if !readable {
-			fmt.Println("stream finished, rpc exit")
-			break
-		}
-		fmt.Printf("receive updated event for sidecar %v: %+v\n", sr.SidecarId, event)
-		err := sss.Send(event)
-		if err != nil {
-			fmt.Printf("send message to sidecar failed: %v\n", err)
-			return err
+	for done := false; !done; {
+		select {
+		case <-sss.Context().Done():
+			fmt.Printf("sidecar %v disconnected, stop streaming\n", sr.SidecarId)
+			done = true
+		case event := <-recvCh:
+			fmt.Printf("receive updated event for sidecar %v: %+v\n", sr.SidecarId, event)
+			if err := sss.Send(event); err != nil {
+				fmt.Printf("send message to sidecar failed: %v\n", err)
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+func (s *Sync) NewGrpcServer() *grpc.Server {
+	gSvr := grpc.NewServer()
+	mesh.RegisterMeshCtrlServer(gSvr, s)
+	return gSvr
 }
