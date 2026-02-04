@@ -105,6 +105,7 @@ func (s *ServiceSubscription) publish(revision int64, et watch.EventType, es *di
 type Storage interface {
 	DelBroadcast(ServiceName)
 	AddBroadcast(ServiceName, broadcaster)
+	Initialize(ServiceName) *discoveryv1.EndpointSlice
 }
 
 type Sync struct {
@@ -156,6 +157,12 @@ func (s *Sync) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStreamingS
 		}
 	}()
 	fmt.Printf("start streaming message to sidecar %v...\n", sr.SidecarId)
+	endpointSlice := s.storage.Initialize(svcName)
+	initEvent := newClientSubscriptionEvent(0, mesh.OpType_ADDED, endpointSlice)
+	if err := sss.Send(initEvent); err != nil {
+		fmt.Printf("send message to sidecar failed: %v\n", err)
+		return err
+	}
 	for done := false; !done; {
 		select {
 		case <-sss.Context().Done():

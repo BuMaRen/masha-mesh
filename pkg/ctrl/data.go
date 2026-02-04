@@ -35,6 +35,20 @@ func (e *EndpointSliceMap) AddBroadcast(serviceName ServiceName, fn broadcaster)
 	fmt.Printf("[EndpointSliceMap][AddBroadcast] Lock released after service %v addition\n", serviceName)
 }
 
+func (e *EndpointSliceMap) Initialize(serviceName ServiceName) *discoveryv1.EndpointSlice {
+	e.mtx.Lock()
+	fmt.Printf("[EndpointSliceMap][Initialize] Lock acquired for service %v initialization\n", serviceName)
+	defer func() {
+		e.mtx.Unlock()
+		fmt.Printf("[EndpointSliceMap][Initialize] Lock released after service %v initialization\n", serviceName)
+	}()
+	out := new(discoveryv1.EndpointSlice)
+	if es, exists := e.esm[serviceName]; exists {
+		es.DeepCopyInto(out)
+	}
+	return out
+}
+
 func (e *EndpointSliceMap) OnUpdate(event *watch.Event) {
 	endpointSlice, ok := event.Object.(*discoveryv1.EndpointSlice)
 	if !ok {
