@@ -1,0 +1,55 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mesh-ctrl
+rules:
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["services", "endpointslices"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mesh-ctrl
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mesh-ctrl
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: default
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mesh-ctrl
+spec:
+  selector:
+    matchLabels:
+      app: mesh-ctrl
+  template:
+    metadata:
+      labels:
+        app: mesh-ctrl
+    spec:
+      containers:
+      - name: mesh-ctrl
+        image: hjmasha/mesh-ctrl:v0.1.13
+        command: ["/app/mesh-ctrl"]
+        args: ["-p", "50051", "-n", "default"]
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+        ports:
+        - containerPort: 50051
+          name: mesh-ctrl-port
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
