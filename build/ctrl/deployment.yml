@@ -48,3 +48,8 @@ spec:
         ports:
         - containerPort: 50051
           name: mesh-ctrl-port
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name

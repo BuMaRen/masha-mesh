@@ -37,6 +37,26 @@ type Logic struct {
 	storage   *EndpointSliceMap
 }
 
+func (l *Logic) watchEndpointSlicesOrDieWithClient(ctx context.Context, clientSet *kubernetes.Clientset) {
+	esi := clientSet.DiscoveryV1().EndpointSlices(l.nameSpace)
+	wi, err := esi.Watch(ctx, metav1.ListOptions{})
+	if err != nil {
+		panic(err)
+	}
+	ch := wi.ResultChan()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event, ok := <-ch:
+			if !ok {
+				return
+			}
+			l.storage.OnUpdate(&event)
+		}
+	}
+}
+
 func (l *Logic) watchEndpointSlicesOrDie(ctx context.Context) {
 	kubeConfig, err := rest.InClusterConfig()
 	if err != nil {
@@ -99,6 +119,18 @@ func (l *Logic) Run() {
 
 	wg.Wait()
 	fmt.Println("controller exited")
+}
+
+func (l *Logic) Leading(root context.Context, clientSet *kubernetes.Clientset) {
+	fmt.Println("start leading...")
+	l.watchEndpointSlicesOrDieWithClient(root, clientSet)
+}
+
+func (l *Logic) Following(root context.Context) {
+	fmt.Println("start following...")
+	if err := l.serveGrpcOrDie(root); err != nil {
+		panic(err)
+	}
 }
 
 func NewLogic(nameSpace string, grpcPort int) *Logic {
