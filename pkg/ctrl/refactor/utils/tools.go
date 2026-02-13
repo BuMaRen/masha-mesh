@@ -1,4 +1,4 @@
-package ctrl
+package utils
 
 import (
 	"strconv"
