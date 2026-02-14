@@ -6,6 +6,7 @@ import (
 	"github.com/BuMaRen/mesh/pkg/api/mesh"
 	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
 	"google.golang.org/grpc"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/klog/v2"
 )
 
@@ -15,6 +16,7 @@ type SidecarInformer func(any)
 
 // GrpcServer 实现 Distributer 接口，维护一个 sidecar 列表和对应的 channel
 type GrpcServer struct {
+	listFn   func(string) (*discoveryv1.EndpointSlice, bool)
 	sidecars map[string]*utils.Sidecar
 	mtx      *sync.RWMutex
 	mesh.UnimplementedMeshCtrlServer
@@ -41,6 +43,13 @@ func (s *GrpcServer) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStre
 	sidecar := utils.NewSidecar(sr.SidecarId, serviceName)
 
 	klog.Infof("[GrpcServer][Subscribe] Sidecar %s subscribed to service %s\n", sr.SidecarId, serviceName)
+
+	// 订阅时先把当前的 EndpointSlice 发给 sidecar，确保 sidecar 能尽快拿到数据
+	es, exist := s.listFn(serviceName)
+	if exist {
+		klog.Infof("[GrpcServer][Subscribe] Sending current EndpointSlice for service %s to sidecar %s\n", serviceName, sr.SidecarId)
+		sidecar.Informer(es)
+	}
 
 	s.mtx.Lock()
 	s.sidecars[sr.SidecarId] = sidecar
@@ -71,7 +80,8 @@ func NewGrpcServer() *GrpcServer {
 	}
 }
 
-func (s *GrpcServer) Compelete() *grpc.Server {
+func (s *GrpcServer) Compelete(fn func(string) (*discoveryv1.EndpointSlice, bool)) *grpc.Server {
+	s.listFn = fn
 	grpcServer := grpc.NewServer()
 	mesh.RegisterMeshCtrlServer(grpcServer, s)
 	return grpcServer

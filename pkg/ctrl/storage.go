@@ -12,6 +12,11 @@ type CoreData struct {
 	endpointSliceMap map[string]*discoveryv1.EndpointSlice
 }
 
+func (d *CoreData) List(svcName string) (*discoveryv1.EndpointSlice, bool) {
+	eps, exist := d.endpointSliceMap[svcName]
+	return eps, exist
+}
+
 func (d *CoreData) OnAdded(obj any) {
 	endpointSlice := obj.(*discoveryv1.EndpointSlice)
 	svcName := endpointSlice.Labels["kubernetes.io/service-name"]
