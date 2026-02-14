@@ -3,16 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/BuMaRen/mesh/pkg/api/mesh"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"k8s.io/klog/v2"
 )
 
 func newRpcClient(target, sidecarID, serviceName string) {
+	klog.Info("Creating gRPC client with target: ", target)
 	c, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
+		klog.Error("Failed to create gRPC client: ", err)
 		panic(err)
 	}
 	client := mesh.NewMeshCtrlClient(c)
@@ -21,11 +25,18 @@ func newRpcClient(target, sidecarID, serviceName string) {
 		ServiceName: serviceName,
 	})
 	if err != nil {
+		klog.Error("Failed to subscribe to events: ", err)
 		panic(err)
 	}
+	klog.Info("Subscribed to events successfully, waiting for events...")
 	for {
 		event, err := stream.Recv()
+		if err == io.EOF {
+			klog.Info("Stream closed by server")
+			break
+		}
 		if err != nil {
+			klog.Error("Failed to receive event: ", err)
 			panic(err)
 		}
 		fmt.Printf("Received event: %+v\n", event)

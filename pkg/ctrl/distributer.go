@@ -24,11 +24,12 @@ type GrpcServer struct {
 func (s *GrpcServer) Publish(svcName string, obj any) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
+
 	klog.Infof("[GrpcServer][Publish] Publishing update for service %s to %d sidecars\n", svcName, len(s.sidecars))
 	for sidecarID, sidecar := range s.sidecars {
+		klog.Infof("[GrpcServer][Publish] Publishing update for service %s to sidecar %s(sub service: %s)\n", svcName, sidecarID, sidecar.SubServiceName)
 		if sidecar.SubServiceName == svcName {
 			sidecar.Informer(obj)
-			klog.Infof("[GrpcServer][Publish] Published update for service %s to sidecar %s\n", svcName, sidecarID)
 		}
 	}
 	klog.Infof("[GrpcServer][Publish] Finished publishing update for service %s to all sidecars\n", svcName)
@@ -36,8 +37,10 @@ func (s *GrpcServer) Publish(svcName string, obj any) {
 
 // RPC:Subcribe sidecar 订阅某个 service 的 EndpointSlice 变化事件，服务端通过 channel 推送消息
 func (s *GrpcServer) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStreamingServer[mesh.ClientSubscriptionEvent]) error {
-	sidecar := utils.NewSidecar(sr.SidecarId)
 	serviceName := sr.ServiceName
+	sidecar := utils.NewSidecar(sr.SidecarId, serviceName)
+
+	klog.Infof("[GrpcServer][Subscribe] Sidecar %s subscribed to service %s\n", sr.SidecarId, serviceName)
 
 	s.mtx.Lock()
 	s.sidecars[sr.SidecarId] = sidecar
@@ -47,6 +50,7 @@ func (s *GrpcServer) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStre
 		s.mtx.Lock()
 		delete(s.sidecars, sr.SidecarId)
 		s.mtx.Unlock()
+		klog.Infof("[GrpcServer][Subscribe] Sidecar %s unsubscribed from service %s\n", sr.SidecarId, serviceName)
 	}()
 
 	receiver := sidecar.Receiver()
@@ -55,6 +59,7 @@ func (s *GrpcServer) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStre
 			klog.Errorf("[GrpcServer][Subscribe] Failed to send event to sidecar %s for service %s: %v\n", sr.SidecarId, serviceName, err)
 			return err
 		}
+		klog.Infof("[GrpcServer][Subscribe] Sent event to sidecar %s for service %s: %+v\n", sr.SidecarId, serviceName, event)
 	}
 	return nil
 }

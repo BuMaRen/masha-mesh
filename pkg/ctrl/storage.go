@@ -8,9 +8,8 @@ import (
 
 type CoreData struct {
 	distributer Distributer
-	// TODO：一个service可能对应多个endpointSlice
-	// TODO：多个endpointSlice的ResourceVersion不一定相同，CoreData需要自己维护一个，用于和sidecar同步
-	endpointSliceMap map[string]map[string]*discoveryv1.EndpointSlice
+	// TODO：一个service可能对应多个endpointSlice，需要自己整合成一个数据结构，方便发送给sidecar
+	endpointSliceMap map[string]*discoveryv1.EndpointSlice
 }
 
 func (d *CoreData) OnAdded(obj any) {
@@ -20,20 +19,20 @@ func (d *CoreData) OnAdded(obj any) {
 	curEps, exists := d.endpointSliceMap[svcName]
 	if !exists {
 		// New EndpointSlice
-		d.endpointSliceMap[svcName] = make(map[string]*discoveryv1.EndpointSlice)
-		d.endpointSliceMap[svcName][endpointName] = endpointSlice.DeepCopy()
+		d.endpointSliceMap[svcName] = endpointSlice.DeepCopy()
 		// Publish 将内容写给 sidecar 的 channel，grpc 的 stream 再将从 channel 里读到的内容发给 sidecar
 		d.distributer.Publish(svcName, d.endpointSliceMap[svcName])
 		klog.Infof("Added new EndpointSlice %s for service %s", endpointName, svcName)
 		return
 	}
-	rVersion := curEps[endpointName].ObjectMeta.ResourceVersion
+	rVersion := curEps.ObjectMeta.ResourceVersion
 	if !utils.VersionIncrement(rVersion, endpointSlice.ObjectMeta.ResourceVersion) {
 		klog.Warningf("EndpointSlice %s version not incremented correctly: current=%s, incoming=%s", svcName, rVersion, endpointSlice.ObjectMeta.ResourceVersion)
 		// TODO: handle version mismatch
 		return
 	}
-	d.endpointSliceMap[svcName][endpointName] = endpointSlice.DeepCopy()
+	// TODO: 处理多个 endpointSlice 的合并逻辑，目前先简单地覆盖掉
+	d.endpointSliceMap[svcName] = endpointSlice.DeepCopy()
 	d.distributer.Publish(svcName, d.endpointSliceMap[svcName])
 	klog.Infof("Added existing EndpointSlice %s for service %s with updated version", endpointName, svcName)
 }
@@ -45,19 +44,19 @@ func (d *CoreData) OnUpdate(oldObj, newObj any) {
 	curEps, exists := d.endpointSliceMap[svcName]
 	if !exists {
 		// Treat as new addition
-		d.endpointSliceMap[svcName] = make(map[string]*discoveryv1.EndpointSlice)
-		d.endpointSliceMap[svcName][endpointName] = endpointSlice.DeepCopy()
+		d.endpointSliceMap[svcName] = endpointSlice.DeepCopy()
 		d.distributer.Publish(svcName, d.endpointSliceMap[svcName])
 		klog.Infof("Updated EndpointSlice %s for service %s which did not exist before, treated as addition", endpointName, svcName)
 		return
 	}
-	rVersion := curEps[endpointName].ObjectMeta.ResourceVersion
+	rVersion := curEps.ObjectMeta.ResourceVersion
 	if !utils.VersionIncrement(rVersion, endpointSlice.ObjectMeta.ResourceVersion) {
 		klog.Warningf("EndpointSlice %s version not incremented correctly: current=%s, incoming=%s", svcName, rVersion, endpointSlice.ObjectMeta.ResourceVersion)
 		// TODO: handle version mismatch
 		return
 	}
-	d.endpointSliceMap[svcName][endpointName] = endpointSlice.DeepCopy()
+	// TODO: 处理多个 endpointSlice 的合并逻辑，目前先简单地覆盖掉
+	d.endpointSliceMap[svcName] = endpointSlice.DeepCopy()
 	d.distributer.Publish(svcName, d.endpointSliceMap[svcName])
 	klog.Infof("Updated EndpointSlice %s for service %s with new version", endpointName, svcName)
 }
@@ -70,7 +69,7 @@ func (d *CoreData) OnDeleted(obj any) {
 		klog.Warningf("Attempted to delete non-existent EndpointSlice %s for service %s", endpointName, svcName)
 		return
 	}
-	delete(d.endpointSliceMap[endpointName], svcName)
+	delete(d.endpointSliceMap, svcName)
 	d.distributer.Publish(svcName, nil)
 	klog.Infof("Deleted EndpointSlice %s for service %s", endpointName, svcName)
 }
@@ -78,6 +77,6 @@ func (d *CoreData) OnDeleted(obj any) {
 func NewCoreData(distributer Distributer) *CoreData {
 	return &CoreData{
 		distributer:      distributer,
-		endpointSliceMap: make(map[string]map[string]*discoveryv1.EndpointSlice),
+		endpointSliceMap: make(map[string]*discoveryv1.EndpointSlice),
 	}
 }
