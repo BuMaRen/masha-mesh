@@ -64,10 +64,11 @@ func (l *Logic) ServeGrpcOrDie(ctx context.Context) error {
 
 func NewLogic(grpcPort int) *Logic {
 	distributer := NewGrpcServer()
-	compeletedGrpcServer := distributer.Compelete()
+	storage := NewCoreData(distributer)
+	compeletedGrpcServer := distributer.Compelete(storage.List)
 	return &Logic{
 		grpcPort:             grpcPort,
-		core:                 NewCoreData(distributer),
+		core:                 storage,
 		compeletedGrpcServer: compeletedGrpcServer,
 	}
 }
