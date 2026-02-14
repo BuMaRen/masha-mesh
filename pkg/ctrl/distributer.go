@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/BuMaRen/mesh/pkg/api/mesh"
-	"github.com/BuMaRen/mesh/pkg/ctrl/refactor/utils"
+	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
 	"google.golang.org/grpc"
 	"k8s.io/klog/v2"
 )
@@ -64,6 +64,12 @@ func NewGrpcServer() *GrpcServer {
 		sidecars: make(map[string]*utils.Sidecar, mapInitialSize),
 		mtx:      &sync.RWMutex{},
 	}
+}
+
+func (s *GrpcServer) Compelete() *grpc.Server {
+	grpcServer := grpc.NewServer()
+	mesh.RegisterMeshCtrlServer(grpcServer, s)
+	return grpcServer
 }
 
 func NewCompletedGrpcServer() *grpc.Server {

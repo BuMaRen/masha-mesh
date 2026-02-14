@@ -17,8 +17,14 @@ roleRef:
   name: mesh-ctrl
 subjects:
   - kind: ServiceAccount
-    name: default
+    name: mesh-ctrl
     namespace: default
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mesh-ctrl
+  namespace: default
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -33,9 +39,10 @@ spec:
       labels:
         app: mesh-ctrl
     spec:
+      serviceAccountName: mesh-ctrl
       containers:
       - name: mesh-ctrl
-        image: hjmasha/mesh-ctrl:v0.1.13
+        image: hjmasha/mesh-ctrl:v0.1.21
         command: ["/app/mesh-ctrl"]
         args: ["-p", "50051", "-n", "default"]
         resources:

@@ -1,7 +1,7 @@
 package ctrl
 
 import (
-	"github.com/BuMaRen/mesh/pkg/ctrl/refactor/utils"
+	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/klog/v2"
 )
