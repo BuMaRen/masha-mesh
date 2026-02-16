@@ -23,7 +23,7 @@ func NewSidecar(name, subService string) *Sidecar {
 }
 
 // Informer 把 obj 写到 channel 中，阻塞则跳过
-func (s *Sidecar) Informer(obj any) {
+func (s *Sidecar) Informer(opType mesh.OpType, obj any) {
 	klog.Errorf("[Sidecar][Informer] Start Informer")
 	if obj == nil {
 		// Handle nil object case
@@ -42,7 +42,7 @@ func (s *Sidecar) Informer(obj any) {
 		klog.Infof("[Sidecar][Informer] Received update for service %s which does not match subscribed service %s in sidecar %s, skipping\n", svcName, s.SubServiceName, s.Name)
 		return
 	}
-	protoMsg := newClientSubscriptionEvent(endpointSlice)
+	protoMsg := newClientSubscriptionEvent(opType, endpointSlice)
 	select {
 	case s.receiver <- protoMsg:
 		klog.Infof("[Sidecar][Informer] Sent update for service %s to sidecar %s\n", svcName, s.Name)
@@ -57,7 +57,7 @@ func (s *Sidecar) Receiver() <-chan *mesh.ClientSubscriptionEvent {
 	return s.receiver
 }
 
-func newClientSubscriptionEvent(es *discoveryv1.EndpointSlice) *mesh.ClientSubscriptionEvent {
+func newClientSubscriptionEvent(opType mesh.OpType, es *discoveryv1.EndpointSlice) *mesh.ClientSubscriptionEvent {
 	endpoints := make(map[string]*mesh.EndpointIPs)
 	for _, endpoint := range es.Endpoints {
 		endpointName := string(endpoint.TargetRef.UID)
@@ -66,6 +66,7 @@ func newClientSubscriptionEvent(es *discoveryv1.EndpointSlice) *mesh.ClientSubsc
 		}
 	}
 	return &mesh.ClientSubscriptionEvent{
+		OpType:    opType,
 		Endpoints: endpoints,
 	}
 }
