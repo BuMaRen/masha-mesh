@@ -1,6 +1,7 @@
 package ctrl
 
 import (
+	"github.com/BuMaRen/mesh/pkg/api/mesh"
 	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/klog/v2"
@@ -26,7 +27,7 @@ func (d *CoreData) OnAdded(obj any) {
 		// New EndpointSlice
 		d.endpointSliceMap[svcName] = endpointSlice.DeepCopy()
 		// Publish 将内容写给 sidecar 的 channel，grpc 的 stream 再将从 channel 里读到的内容发给 sidecar
-		d.distributer.Publish(svcName, d.endpointSliceMap[svcName])
+		d.distributer.Publish(svcName, mesh.OpType_ADDED, d.endpointSliceMap[svcName])
 		klog.Infof("Added new EndpointSlice %s for service %s", endpointName, svcName)
 		return
 	}
@@ -38,7 +39,7 @@ func (d *CoreData) OnAdded(obj any) {
 	}
 	// TODO: 处理多个 endpointSlice 的合并逻辑，目前先简单地覆盖掉
 	d.endpointSliceMap[svcName] = endpointSlice.DeepCopy()
-	d.distributer.Publish(svcName, d.endpointSliceMap[svcName])
+	d.distributer.Publish(svcName, mesh.OpType_ADDED, d.endpointSliceMap[svcName])
 	klog.Infof("Added existing EndpointSlice %s for service %s with updated version", endpointName, svcName)
 }
 
@@ -50,7 +51,7 @@ func (d *CoreData) OnUpdate(oldObj, newObj any) {
 	if !exists {
 		// Treat as new addition
 		d.endpointSliceMap[svcName] = endpointSlice.DeepCopy()
-		d.distributer.Publish(svcName, d.endpointSliceMap[svcName])
+		d.distributer.Publish(svcName, mesh.OpType_MODIFIED, d.endpointSliceMap[svcName])
 		klog.Infof("Updated EndpointSlice %s for service %s which did not exist before, treated as addition", endpointName, svcName)
 		return
 	}
@@ -62,7 +63,7 @@ func (d *CoreData) OnUpdate(oldObj, newObj any) {
 	}
 	// TODO: 处理多个 endpointSlice 的合并逻辑，目前先简单地覆盖掉
 	d.endpointSliceMap[svcName] = endpointSlice.DeepCopy()
-	d.distributer.Publish(svcName, d.endpointSliceMap[svcName])
+	d.distributer.Publish(svcName, mesh.OpType_MODIFIED, d.endpointSliceMap[svcName])
 	klog.Infof("Updated EndpointSlice %s for service %s with new version", endpointName, svcName)
 }
 
@@ -75,7 +76,8 @@ func (d *CoreData) OnDeleted(obj any) {
 		return
 	}
 	delete(d.endpointSliceMap, svcName)
-	d.distributer.Publish(svcName, nil)
+	endpointSlice.Endpoints = []discoveryv1.Endpoint{}
+	d.distributer.Publish(svcName, mesh.OpType_DELETED, endpointSlice)
 	klog.Infof("Deleted EndpointSlice %s for service %s", endpointName, svcName)
 }
 

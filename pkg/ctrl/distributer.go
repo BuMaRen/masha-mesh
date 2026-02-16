@@ -23,7 +23,7 @@ type GrpcServer struct {
 }
 
 // Publish 给所有的 sidecar 注册进来的 channel 分发消息，理应不阻塞
-func (s *GrpcServer) Publish(svcName string, obj any) {
+func (s *GrpcServer) Publish(svcName string, opType mesh.OpType, obj any) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -31,7 +31,7 @@ func (s *GrpcServer) Publish(svcName string, obj any) {
 	for sidecarID, sidecar := range s.sidecars {
 		klog.Infof("[GrpcServer][Publish] Publishing update for service %s to sidecar %s(sub service: %s)\n", svcName, sidecarID, sidecar.SubServiceName)
 		if sidecar.SubServiceName == svcName {
-			sidecar.Informer(obj)
+			sidecar.Informer(opType, obj)
 		}
 	}
 	klog.Infof("[GrpcServer][Publish] Finished publishing update for service %s to all sidecars\n", svcName)
@@ -48,7 +48,7 @@ func (s *GrpcServer) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStre
 	es, exist := s.listFn(serviceName)
 	if exist {
 		klog.Infof("[GrpcServer][Subscribe] Sending current EndpointSlice for service %s to sidecar %s\n", serviceName, sr.SidecarId)
-		sidecar.Informer(es)
+		sidecar.Informer(mesh.OpType_ADDED, es)
 	}
 
 	s.mtx.Lock()

@@ -40,6 +40,14 @@ func newRpcClient(target, sidecarID, serviceName string) {
 			panic(err)
 		}
 		fmt.Printf("Received event: %+v\n", event)
+		switch event.GetOpType() {
+		case mesh.OpType_ADDED:
+			klog.Info("Receive a service-add event\n")
+		case mesh.OpType_MODIFIED:
+			klog.Info("Receive a service-modify event\n")
+		case mesh.OpType_DELETED:
+			klog.Info("Receive a service-delete event\n")
+		}
 	}
 }
 
