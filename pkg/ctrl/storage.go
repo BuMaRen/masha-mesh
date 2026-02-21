@@ -2,88 +2,86 @@ package ctrl
 
 import (
 	"github.com/BuMaRen/mesh/pkg/api/mesh"
-	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/klog/v2"
 )
 
 type CoreData struct {
 	distributer Distributer
-	// TODO：一个service可能对应多个endpointSlice，需要自己整合成一个数据结构，方便发送给sidecar
-	endpointSliceMap map[string]*discoveryv1.EndpointSlice
+	// serviceMap 存放一个 service 对应的多个 EndpointSlice，key 是 service 的名字，value 是 EndpointSlice 对象
+	serviceMap map[string]*EndpointSlice
 }
 
 func (d *CoreData) List(svcName string) (*discoveryv1.EndpointSlice, bool) {
-	eps, exist := d.endpointSliceMap[svcName]
-	return eps, exist
+	es, existed := d.serviceMap[svcName]
+	if !existed {
+		klog.Warningf("endpointSlice cache of service %s not found", svcName)
+		return nil, false
+	}
+	return es.Merge(), true
 }
 
 func (d *CoreData) OnAdded(obj any) {
 	endpointSlice := obj.(*discoveryv1.EndpointSlice)
 	svcName := endpointSlice.Labels["kubernetes.io/service-name"]
-	endpointName := endpointSlice.Name
-	curEps, exists := d.endpointSliceMap[svcName]
-	if !exists {
-		// New EndpointSlice
-		d.endpointSliceMap[svcName] = endpointSlice.DeepCopy()
-		// Publish 将内容写给 sidecar 的 channel，grpc 的 stream 再将从 channel 里读到的内容发给 sidecar
-		d.distributer.Publish(svcName, mesh.OpType_ADDED, d.endpointSliceMap[svcName])
-		klog.Infof("Added new EndpointSlice %s for service %s", endpointName, svcName)
-		return
+	if _, exist := d.serviceMap[svcName]; !exist {
+		d.serviceMap[svcName] = &EndpointSlice{
+			serviceName: svcName,
+			esNameToEs:  make(map[string]*discoveryv1.EndpointSlice),
+		}
 	}
-	rVersion := curEps.ObjectMeta.ResourceVersion
-	if !utils.VersionIncrement(rVersion, endpointSlice.ObjectMeta.ResourceVersion) {
-		klog.Warningf("EndpointSlice %s version not incremented correctly: current=%s, incoming=%s", svcName, rVersion, endpointSlice.ObjectMeta.ResourceVersion)
-		// TODO: handle version mismatch
-		return
-	}
-	// TODO: 处理多个 endpointSlice 的合并逻辑，目前先简单地覆盖掉
-	d.endpointSliceMap[svcName] = endpointSlice.DeepCopy()
-	d.distributer.Publish(svcName, mesh.OpType_ADDED, d.endpointSliceMap[svcName])
-	klog.Infof("Added existing EndpointSlice %s for service %s with updated version", endpointName, svcName)
+	// resourceVersion 的检查放在 EndpointSlice 里做
+	d.serviceMap[svcName].OnAdded(endpointSlice)
+
+	serviceEs := d.serviceMap[svcName].Merge()
+	// TODO: 目前sidecar只能对service粒度做订阅，endpointSlice的新增会需要sidecar更新整个Service的缓存
+	d.distributer.Publish(svcName, mesh.OpType_ADDED, serviceEs)
+	klog.Infof("Added EndpointSlice for service %s with version %s", svcName, serviceEs.ObjectMeta.ResourceVersion)
 }
 
 func (d *CoreData) OnUpdate(oldObj, newObj any) {
 	endpointSlice := newObj.(*discoveryv1.EndpointSlice)
 	svcName := endpointSlice.Labels["kubernetes.io/service-name"]
-	endpointName := endpointSlice.Name
-	curEps, exists := d.endpointSliceMap[svcName]
-	if !exists {
-		// Treat as new addition
-		d.endpointSliceMap[svcName] = endpointSlice.DeepCopy()
-		d.distributer.Publish(svcName, mesh.OpType_MODIFIED, d.endpointSliceMap[svcName])
-		klog.Infof("Updated EndpointSlice %s for service %s which did not exist before, treated as addition", endpointName, svcName)
-		return
+	if _, exist := d.serviceMap[svcName]; !exist {
+		d.serviceMap[svcName] = &EndpointSlice{
+			serviceName: svcName,
+			esNameToEs:  make(map[string]*discoveryv1.EndpointSlice),
+		}
 	}
-	rVersion := curEps.ObjectMeta.ResourceVersion
-	if !utils.VersionIncrement(rVersion, endpointSlice.ObjectMeta.ResourceVersion) {
-		klog.Warningf("EndpointSlice %s version not incremented correctly: current=%s, incoming=%s", svcName, rVersion, endpointSlice.ObjectMeta.ResourceVersion)
-		// TODO: handle version mismatch
-		return
-	}
-	// TODO: 处理多个 endpointSlice 的合并逻辑，目前先简单地覆盖掉
-	d.endpointSliceMap[svcName] = endpointSlice.DeepCopy()
-	d.distributer.Publish(svcName, mesh.OpType_MODIFIED, d.endpointSliceMap[svcName])
-	klog.Infof("Updated EndpointSlice %s for service %s with new version", endpointName, svcName)
+	// resourceVersion 的检查放在 EndpointSlice 里做
+	d.serviceMap[svcName].OnUpdate(oldObj.(*discoveryv1.EndpointSlice), newObj.(*discoveryv1.EndpointSlice))
+
+	serviceEs := d.serviceMap[svcName].Merge()
+	// TODO: 目前sidecar只能对service粒度做订阅，endpointSlice的更新会需要sidecar更新整个Service的缓存（https://github.com/users/BuMaRen/projects/4/views/1?pane=issue&itemId=158944635&issue=BuMaRen%7Cmasha-mesh%7C22）
+	d.distributer.Publish(svcName, mesh.OpType_MODIFIED, serviceEs)
+	klog.Infof("Updated EndpointSlice for service %s with version %s", svcName, serviceEs.ObjectMeta.ResourceVersion)
 }
 
 func (d *CoreData) OnDeleted(obj any) {
 	endpointSlice := obj.(*discoveryv1.EndpointSlice)
 	svcName := endpointSlice.Labels["kubernetes.io/service-name"]
-	endpointName := endpointSlice.Name
-	if _, exist := d.endpointSliceMap[svcName]; !exist {
-		klog.Warningf("Attempted to delete non-existent EndpointSlice %s for service %s", endpointName, svcName)
+	if _, exist := d.serviceMap[svcName]; !exist {
+		klog.Warningf("Attempted to delete EndpointSlice for non-existent service %s", svcName)
 		return
 	}
-	delete(d.endpointSliceMap, svcName)
-	endpointSlice.Endpoints = []discoveryv1.Endpoint{}
-	d.distributer.Publish(svcName, mesh.OpType_DELETED, endpointSlice)
-	klog.Infof("Deleted EndpointSlice %s for service %s", endpointName, svcName)
+	d.serviceMap[svcName].OnDelete(endpointSlice)
+
+	serviceEs := d.serviceMap[svcName].Merge()
+	// TODO: 目前sidecar只能对service粒度做订阅，endpointSlice的删除(service的其他endpointSlice还在)对于sidecar来说只是一次更新
+	if len(serviceEs.Endpoints) == 0 {
+		d.distributer.Publish(svcName, mesh.OpType_DELETED, serviceEs)
+		delete(d.serviceMap, svcName)
+		klog.Infof("Deleted all EndpointSlices for service %s with version %s", svcName, serviceEs.ObjectMeta.ResourceVersion)
+		return
+	}
+	// service 还有其他 EndpointSlice，发布更新事件
+	d.distributer.Publish(svcName, mesh.OpType_MODIFIED, serviceEs)
+	klog.Infof("Deleted EndpointSlice for service %s with version %s", svcName, serviceEs.ObjectMeta.ResourceVersion)
 }
 
 func NewCoreData(distributer Distributer) *CoreData {
 	return &CoreData{
-		distributer:      distributer,
-		endpointSliceMap: make(map[string]*discoveryv1.EndpointSlice),
+		distributer: distributer,
+		serviceMap:  make(map[string]*EndpointSlice),
 	}
 }
