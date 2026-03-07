@@ -4,6 +4,8 @@ type Options struct {
 	target  string
 	uid     string
 	svcName string
+
+	address string
 }
 
 func NewOptions() *Options {
@@ -11,5 +13,6 @@ func NewOptions() *Options {
 		target:  "mesh-ctrl:50051",
 		uid:     "mesh-sidecar",
 		svcName: "mesh-ctrl",
+		address: ":9090",
 	}
 }
