@@ -49,7 +49,7 @@ func (c *MeshClient) Unsubscribe(ctx context.Context, serviceName string) error 
 	return nil
 }
 
-func (c *MeshClient) Subscribe(ctx context.Context, serviceName string) {
+func (c *MeshClient) Subscribe(ctx context.Context, serviceName string) error {
 	subReq := &mesh.SubscriptionRequest{
 		SidecarId:   c.id,
 		ServiceName: serviceName,
@@ -57,28 +57,31 @@ func (c *MeshClient) Subscribe(ctx context.Context, serviceName string) {
 	stream, err := c.grpcClient.Subscribe(ctx, subReq)
 	if err != nil {
 		klog.Error("Failed to subscribe to events: ", err)
-		panic(err)
+		return err
 	}
-	klog.Info("Subscribed to events successfully, waiting for events...")
-	for {
-		event, err := stream.Recv()
-		if err != nil {
-			klog.Error("Failed to receive event: ", err)
-			panic(err)
+	go func() {
+		klog.Info("Subscribed to events successfully, waiting for events...")
+		for {
+			event, err := stream.Recv()
+			if err != nil {
+				klog.Error("Failed to receive event: ", err)
+				return
+			}
+			klog.Infof("Received event: %+v\n", event)
+			switch event.GetOpType() {
+			case mesh.OpType_ADDED:
+				klog.Info("Receive a service-add event\n")
+				c.serviceCache.onAdd(serviceName, (*Endpoints)(event))
+			case mesh.OpType_MODIFIED:
+				klog.Info("Receive a service-modify event\n")
+				c.serviceCache.onUpdate(serviceName, (*Endpoints)(event))
+			case mesh.OpType_DELETED:
+				klog.Info("Receive a service-delete event\n")
+				c.serviceCache.onDelete(serviceName)
+			}
 		}
-		klog.Infof("Received event: %+v\n", event)
-		switch event.GetOpType() {
-		case mesh.OpType_ADDED:
-			klog.Info("Receive a service-add event\n")
-			c.serviceCache.onAdd(serviceName, (*Endpoints)(event))
-		case mesh.OpType_MODIFIED:
-			klog.Info("Receive a service-modify event\n")
-			c.serviceCache.onUpdate(serviceName, (*Endpoints)(event))
-		case mesh.OpType_DELETED:
-			klog.Info("Receive a service-delete event\n")
-			c.serviceCache.onDelete(serviceName)
-		}
-	}
+	}()
+	return nil
 }
 
 func (c *MeshClient) GetServiceIps(serviceName string) map[string][]string {
