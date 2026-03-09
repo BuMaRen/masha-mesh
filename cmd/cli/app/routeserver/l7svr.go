@@ -5,7 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
+	"strings"
 
 	"github.com/BuMaRen/mesh/pkg/cli"
 )
@@ -40,22 +40,37 @@ func (l7 *L7RouteServer) Run() error {
 }
 
 func (l7 *L7RouteServer) handleRequest(w http.ResponseWriter, r *http.Request) {
-	backend := &url.URL{}
 	// Create reverse proxy
-	proxy := httputil.NewSingleHostReverseProxy(backend)
-
-	// Modify request
-	r.URL.Host = backend.Host
-	r.URL.Scheme = backend.Scheme
-	r.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
-	r.Host = backend.Host
+	proxy := &httputil.ReverseProxy{Transport: l7}
 
 	// Add custom error handler
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("L7 Proxy: Error forwarding to %s: %v", backend.String(), err)
+		log.Printf("L7 Proxy: Error forwarding: %v", err)
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 	}
 
 	// Proxy the request
 	proxy.ServeHTTP(w, r)
+}
+
+// 判断host是不是由service组成，是的话返回serviceName和True
+func serviceAsHost(host string) (string, string, bool) {
+	hostStr := host
+	port := ""
+	if strings.Contains(host, ":") {
+		parts := strings.Split(host, ":")
+		hostStr = parts[0]
+		port = parts[1]
+	}
+
+	return hostStr, port, net.ParseIP(hostStr) == nil
+}
+
+func (l7 *L7RouteServer) availableEndpoints(serviceName string) []string {
+	result := []string{}
+	eps := l7.meshClient.GetServiceIps(serviceName)
+	for _, ep := range eps {
+		result = append(result, ep[0])
+	}
+	return result
 }
