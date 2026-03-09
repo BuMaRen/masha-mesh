@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"strings"
 
 	"github.com/BuMaRen/mesh/pkg/cli"
 )
@@ -17,9 +16,10 @@ type L7RouteServer struct {
 	meshClient *cli.MeshClient
 }
 
-func NewL7RouteServer(meshClient *cli.MeshClient, opts ...L7OptionsFunc) *L7RouteServer {
+func NewL7RouteServer(meshClient *cli.MeshClient, address string, opts ...L7OptionsFunc) *L7RouteServer {
 	l7svr := &L7RouteServer{
 		meshClient: meshClient,
+		address:    address,
 	}
 	for _, opt := range opts {
 		opt(l7svr)
@@ -51,26 +51,4 @@ func (l7 *L7RouteServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Proxy the request
 	proxy.ServeHTTP(w, r)
-}
-
-// 判断host是不是由service组成，是的话返回serviceName和True
-func serviceAsHost(host string) (string, string, bool) {
-	hostStr := host
-	port := ""
-	if strings.Contains(host, ":") {
-		parts := strings.Split(host, ":")
-		hostStr = parts[0]
-		port = parts[1]
-	}
-
-	return hostStr, port, net.ParseIP(hostStr) == nil
-}
-
-func (l7 *L7RouteServer) availableEndpoints(serviceName string) []string {
-	result := []string{}
-	eps := l7.meshClient.GetServiceIps(serviceName)
-	for _, ep := range eps {
-		result = append(result, ep[0])
-	}
-	return result
 }

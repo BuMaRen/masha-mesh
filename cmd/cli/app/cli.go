@@ -1,8 +1,6 @@
 package app
 
 import (
-	"context"
-
 	"github.com/spf13/cobra"
 )
 
@@ -20,9 +18,9 @@ to quickly create a Cobra application.`,
 		// Uncomment the following line if your bare application
 		// has an action associated with it:
 		Run: func(cmd *cobra.Command, args []string) {
-			executor := NewExecutor()
-			executor.Complete(opts)
-			executor.Run(context.Background())
+			// executor := NewExecutor()
+			// executor.Complete(opts)
+			// executor.Run(context.Background())
 		},
 	}
 	rootCmd.PersistentFlags().StringVar(&opts.target, "target", "mesh-ctrl:50051", "gRPC server target")

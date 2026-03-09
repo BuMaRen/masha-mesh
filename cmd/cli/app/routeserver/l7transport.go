@@ -3,7 +3,9 @@ package routeserver
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"k8s.io/klog/v2"
@@ -40,7 +42,7 @@ func (l7 *L7RouteServer) RoundTrip(req *http.Request) (*http.Response, error) {
 	svrHost, svrPort, isService := serviceAsHost(req.Host)
 	if !isService {
 		// source request has specified host ip
-		return l7.redirectDirect(req)
+		return http.DefaultTransport.RoundTrip(req)
 	}
 
 	defer req.Body.Close()
@@ -78,6 +80,23 @@ func (l7 *L7RouteServer) RoundTrip(req *http.Request) (*http.Response, error) {
 	return nil, fmt.Errorf("proxy failed to get response from all endpoints")
 }
 
-func (l7 *L7RouteServer) redirectDirect(req *http.Request) (*http.Response, error) {
-	return http.DefaultTransport.RoundTrip(req)
+// 判断host是不是由service组成，是的话返回serviceName和True
+func serviceAsHost(host string) (string, string, bool) {
+	hostStr := host
+	port := ""
+	if strings.Contains(host, ":") {
+		parts := strings.Split(host, ":")
+		hostStr = parts[0]
+		port = parts[1]
+	}
+	return hostStr, port, net.ParseIP(hostStr) == nil
+}
+
+func (l7 *L7RouteServer) availableEndpoints(serviceName string) []string {
+	result := []string{}
+	eps := l7.meshClient.GetServiceIps(serviceName)
+	for _, ep := range eps {
+		result = append(result, ep[0])
+	}
+	return result
 }

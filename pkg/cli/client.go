@@ -27,8 +27,9 @@ type MeshClient struct {
 	connected    bool
 }
 
-func NewMeshClient() *MeshClient {
+func NewMeshClient(id string) *MeshClient {
 	return &MeshClient{
+		id:           id,
 		serviceCache: NewServiceCache(100),
 	}
 }
