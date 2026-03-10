@@ -1,4 +1,4 @@
-package routeserver
+package proxy
 
 import (
 	"bufio"

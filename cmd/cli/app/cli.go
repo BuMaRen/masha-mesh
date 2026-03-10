@@ -1,11 +1,18 @@
 package app
 
 import (
+	"context"
+
+	"github.com/BuMaRen/mesh/pkg/cli"
 	"github.com/spf13/cobra"
 )
 
+func rootContext() context.Context {
+	return context.Background()
+}
+
 func NewCommand() *cobra.Command {
-	opts := NewOptions()
+	opts := &Options{}
 	rootCmd := &cobra.Command{
 		Use:   "mesh-cli",
 		Short: "A brief description of your application",
@@ -18,14 +25,14 @@ to quickly create a Cobra application.`,
 		// Uncomment the following line if your bare application
 		// has an action associated with it:
 		Run: func(cmd *cobra.Command, args []string) {
-			// executor := NewExecutor()
-			// executor.Complete(opts)
-			// executor.Run(context.Background())
+			svcCache := cli.NewServiceCache(opts.cacheCapacity)
+			meshClient := cli.NewMeshClient(opts.uid, svcCache)
+			proxyServer, httpServer := opts.Complete(meshClient, cli.NewServiceContext())
+			ctx := rootContext()
+			proxyServer.Run(ctx)
+			httpServer.Run(ctx)
 		},
 	}
-	rootCmd.PersistentFlags().StringVar(&opts.target, "target", "mesh-ctrl:50051", "gRPC server target")
-	rootCmd.PersistentFlags().StringVar(&opts.uid, "sidecar-id", "mesh-sidecar", "Sidecar ID to subscribe to")
-	rootCmd.PersistentFlags().StringVar(&opts.svcName, "service-name", "mesh-ctrl", "Service name to subscribe to")
-	rootCmd.PersistentFlags().StringVar(&opts.address, "address", ":9090", "Address for the config server to listen on")
+	opts.ParseFlags(rootCmd)
 	return rootCmd
 }

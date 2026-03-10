@@ -25,23 +25,24 @@ func WithAddress(address string) OptionsFunc {
 	}
 }
 
-func NewHttpServer(client *cli.MeshClient, serviceContext *cli.ServiceContext, opts ...OptionsFunc) *HttpServer {
-	server := &HttpServer{
-		client:     client,
-		svcContext: serviceContext,
-	}
+// NewHttpServer 创建一个新的 HttpServer 实例
+// client 和 serviceContext 是必需的参数，外部初始化后传入
+func NewHttpServer(opts ...OptionsFunc) *HttpServer {
+	server := &HttpServer{}
 	for _, opt := range opts {
 		opt(server)
 	}
 	return server
 }
 
-func (s *HttpServer) Complete() {
+func (s *HttpServer) Complete(client *cli.MeshClient, serviceContext *cli.ServiceContext) {
 	if _, _, err := net.SplitHostPort(s.address); err != nil {
 		klog.Errorf("Invalid address: %s\n", s.address)
 		panic(fmt.Sprintf("Invalid address: %s", s.address))
 	}
 	s.engine = gin.Default()
+	s.client = client
+	s.svcContext = serviceContext
 }
 
 // Run 运行HTTP服务器

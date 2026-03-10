@@ -1,8 +1,9 @@
-package routeserver
+package proxy
 
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -14,25 +15,26 @@ import (
 	"k8s.io/klog/v2"
 )
 
-type L4RouteServer struct {
+type L4Proxy struct {
 	address string
 	l7Port  int
 }
 
-func NewL4RouteServer(address string) *L4RouteServer {
-	return &L4RouteServer{
+func NewL4RouteServer(address string, l7Port int) *L4Proxy {
+	return &L4Proxy{
 		address: address,
+		l7Port:  l7Port,
 	}
 }
 
-func (l4 *L4RouteServer) Complete() {
+func (l4 *L4Proxy) Complete() {
 	_, _, err := net.SplitHostPort(l4.address)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (l4 *L4RouteServer) ProxyLoop() {
+func (l4 *L4Proxy) ProxyLoop(ctx context.Context) {
 	listener, err := net.Listen("tcp", l4.address)
 	if err != nil {
 		panic(err)
@@ -45,16 +47,16 @@ func (l4 *L4RouteServer) ProxyLoop() {
 		}
 		if isHttp(conn.Reader) {
 			// Handle HTTP traffic with L7 proxy
-			go l4.transferToL7(conn, l4.l7Port)
+			go l4.transferToL7(ctx, conn, l4.l7Port)
 			continue
 		}
 		// 不是 HTTP 流量，进行 TCP 透传
-		go l4.transmission(conn.Connection())
+		go l4.transmission(ctx, conn.Connection())
 	}
 }
 
 // TCP 透传, 将流量直接转发到原始目的地, 直到双端关闭
-func (l4 *L4RouteServer) transmission(conn net.Conn) {
+func (l4 *L4Proxy) transmission(ctx context.Context, conn net.Conn) {
 	originalDst, err := getOriginalDst(conn)
 	if err != nil {
 		klog.Errorf("get remote ip from conn failed with error: %+v", err)
@@ -85,28 +87,51 @@ func (l4 *L4RouteServer) transmission(conn net.Conn) {
 }
 
 // 将 HTTP 流量转发到 L7 代理, 直到双端关闭
-func (l4 *L4RouteServer) transferToL7(conn *IoWR, l7Port int) {
+func (l4 *L4Proxy) transferToL7(ctx context.Context, conn *IoWR, l7Port int) {
 	output, err := net.DialTimeout("tcp", fmt.Sprintf(":%v", l7Port), 5*time.Second)
 	if err != nil {
 		klog.Errorf("dialing to http server: %v", err)
+		conn.Close()
 		return
 	}
-	defer output.Close()
-	defer conn.Close()
+	done := make(chan struct{})
+	defer close(done)
+
+	go func() {
+		select {
+		case <-done: // 正常结束
+			output.Close()
+			conn.Close()
+		case <-ctx.Done():
+			output.Close()
+			conn.Close()
+		}
+	}()
 
 	wg := sync.WaitGroup{}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_, err1 := io.Copy(output, conn)
-		if err1 != nil {
-			klog.Errorf("copy from conn to output failed with error: %+v", err1)
+		if _, err := io.Copy(output, conn); err != nil {
+			klog.Errorf("copy from conn to output failed with error: %+v", err)
+		}
+		if tcpConn, ok := output.(*net.TCPConn); ok {
+			tcpConn.CloseWrite()
 		}
 	}()
-	_, err = io.Copy(conn, output)
-	if err != nil {
-		klog.Errorf("copy from output to conn failed with error: %+v", err)
-	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if _, err := io.Copy(conn.Connection(), output); err != nil {
+			klog.Errorf("copy from output to conn failed with error: %+v", err)
+		}
+		if tcpConn, ok := conn.Connection().(*net.TCPConn); ok {
+			tcpConn.CloseWrite()
+		}
+	}()
+
 	wg.Wait()
 }
 

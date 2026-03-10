@@ -1,4 +1,4 @@
-package routeserver
+package proxy
 
 import (
 	"context"
@@ -38,7 +38,7 @@ import (
 // must arrange to wait for the Close call before doing so.
 //
 // The Request's URL and Header fields must be initialized.
-func (l7 *L7RouteServer) RoundTrip(req *http.Request) (*http.Response, error) {
+func (l7 *L7Proxy) RoundTrip(req *http.Request) (*http.Response, error) {
 	svrHost, svrPort, isService := serviceAsHost(req.Host)
 	if !isService {
 		// source request has specified host ip
@@ -92,7 +92,7 @@ func serviceAsHost(host string) (string, string, bool) {
 	return hostStr, port, net.ParseIP(hostStr) == nil
 }
 
-func (l7 *L7RouteServer) availableEndpoints(serviceName string) []string {
+func (l7 *L7Proxy) availableEndpoints(serviceName string) []string {
 	result := []string{}
 	eps := l7.meshClient.GetServiceIps(serviceName)
 	for _, ep := range eps {

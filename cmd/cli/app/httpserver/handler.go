@@ -29,7 +29,6 @@ func (s *HttpServer) subscribeChain(ctx context.Context, key string) []gin.Handl
 			c.JSON(http.StatusBadRequest, gin.H{"error": "service already existed, unsubscribe first"})
 			return
 		}
-		ctx := s.svcContext.NewServiceContext(ctx, serviceName)
 		if err := s.subscribe(ctx, serviceName); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

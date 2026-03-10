@@ -1,6 +1,7 @@
-package routeserver
+package proxy
 
 import (
+	"context"
 	"log"
 	"net"
 	"net/http"
@@ -9,15 +10,15 @@ import (
 	"github.com/BuMaRen/mesh/pkg/cli"
 )
 
-type L7OptionsFunc func(*L7RouteServer)
+type L7OptionsFunc func(*L7Proxy)
 
-type L7RouteServer struct {
+type L7Proxy struct {
 	address    string
 	meshClient *cli.MeshClient
 }
 
-func NewL7RouteServer(meshClient *cli.MeshClient, address string, opts ...L7OptionsFunc) *L7RouteServer {
-	l7svr := &L7RouteServer{
+func NewL7RouteServer(meshClient *cli.MeshClient, address string, opts ...L7OptionsFunc) *L7Proxy {
+	l7svr := &L7Proxy{
 		meshClient: meshClient,
 		address:    address,
 	}
@@ -27,19 +28,19 @@ func NewL7RouteServer(meshClient *cli.MeshClient, address string, opts ...L7Opti
 	return l7svr
 }
 
-func (l7 *L7RouteServer) Complete() {
+func (l7 *L7Proxy) Complete() {
 	_, _, err := net.SplitHostPort(l7.address)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (l7 *L7RouteServer) Run() error {
+func (l7 *L7Proxy) Run(ctx context.Context) error {
 	handler := http.HandlerFunc(l7.handleRequest)
 	return http.ListenAndServe(l7.address, handler)
 }
 
-func (l7 *L7RouteServer) handleRequest(w http.ResponseWriter, r *http.Request) {
+func (l7 *L7Proxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	// Create reverse proxy
 	proxy := &httputil.ReverseProxy{Transport: l7}
 

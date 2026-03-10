@@ -27,10 +27,11 @@ type MeshClient struct {
 	connected    bool
 }
 
-func NewMeshClient(id string) *MeshClient {
+func NewMeshClient(id string, serviceCache *ServiceCache) *MeshClient {
 	return &MeshClient{
 		id:           id,
-		serviceCache: NewServiceCache(100),
+		serviceCache: serviceCache,
+		// serviceCache: NewServiceCache(serviceCapacity),
 	}
 }
 
