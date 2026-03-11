@@ -35,6 +35,7 @@ func (l7 *L7Proxy) Complete() {
 	}
 }
 
+// Run 启动 L7 代理服务器，阻塞监听 HTTP 请求并进行反向代理
 func (l7 *L7Proxy) Run(ctx context.Context) error {
 	handler := http.HandlerFunc(l7.handleRequest)
 	return http.ListenAndServe(l7.address, handler)

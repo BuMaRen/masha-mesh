@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"sync"
 
 	"github.com/BuMaRen/mesh/pkg/cli"
 	"github.com/spf13/cobra"
+	"k8s.io/klog/v2"
 )
 
 func rootContext() context.Context {
@@ -29,8 +31,20 @@ to quickly create a Cobra application.`,
 			meshClient := cli.NewMeshClient(opts.uid, svcCache)
 			proxyServer, httpServer := opts.Complete(meshClient, cli.NewServiceContext())
 			ctx := rootContext()
-			proxyServer.Run(ctx)
-			httpServer.Run(ctx)
+			wg := sync.WaitGroup{}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				proxyServer.Run(ctx)
+			}()
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := httpServer.Run(ctx); err != nil {
+					klog.Errorf("http server run failed with error: %+v", err)
+				}
+			}()
+			wg.Wait()
 		},
 	}
 	opts.ParseFlags(rootCmd)

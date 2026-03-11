@@ -34,9 +34,9 @@ func (o *Options) Complete(meshClient *cli.MeshClient, svcContext *cli.ServiceCo
 
 func (o *Options) ParseFlags(cmd *cobra.Command) {
 	// meshClient 相关配置
-	cmd.Flags().StringVarP(&o.target, "target", "t", "mesh-ctrl:50051", "Target service in format namespace/name")
 	cmd.Flags().StringVar(&o.uid, "uid", "mesh-cli", "Unique identifier for the client")
 	cmd.Flags().IntVarP(&o.cacheCapacity, "cache-capacity", "c", 100, "Capacity of the service cache")
+	cmd.Flags().StringVarP(&o.target, "target", "t", "mesh-ctrl:50051", "Target service in format namespace/name")
 
 	// l4 proxy 和 l7 proxy 的地址配置，l4 转发 l7 业务到 l7 proxy
 	cmd.Flags().IntVar(&o.l7Port, "l7-port", 8080, "Port for L7 proxy to listen on")

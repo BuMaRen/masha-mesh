@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/BuMaRen/mesh/pkg/cli"
+	"k8s.io/klog/v2"
 )
 
 type OptionsFunc func(*ProxyOptions)
@@ -52,8 +53,14 @@ type Proxy struct {
 	l7Proxy *L7Proxy
 }
 
-// TODO: 需要增加优雅关闭的逻辑
-func (s *Proxy) Run(ctx context.Context) error {
-	go s.l4Proxy.ProxyLoop(ctx)
-	return s.l7Proxy.Run(ctx)
+// Run 启动 L4 和 L7 代理服务器，阻塞监听并处理流量
+func (s *Proxy) Run(ctx context.Context) {
+	go func() {
+		if err := s.l4Proxy.ProxyLoop(ctx); err != nil {
+			klog.Errorf("l4 proxy loop failed with error: %+v", err)
+		}
+	}()
+	if err := s.l7Proxy.Run(ctx); err != nil {
+		klog.Errorf("l7 proxy run failed with error: %+v", err)
+	}
 }

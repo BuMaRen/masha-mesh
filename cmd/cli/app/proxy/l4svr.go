@@ -34,24 +34,31 @@ func (l4 *L4Proxy) Complete() {
 	}
 }
 
-func (l4 *L4Proxy) ProxyLoop(ctx context.Context) {
+// ProxyLoop 启动 L4 代理服务器，阻塞监听 TCP 连接并进行流量转发
+func (l4 *L4Proxy) ProxyLoop(ctx context.Context) error {
 	listener, err := net.Listen("tcp", l4.address)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer listener.Close()
 	for {
-		conn, err := accept(listener)
-		if err != nil {
-			continue
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			conn, err := accept(listener)
+			if err != nil {
+				klog.Errorf("accept connection failed with error: %+v", err)
+				continue
+			}
+			if isHttp(conn.Reader) {
+				// Handle HTTP traffic with L7 proxy
+				go l4.transferToL7(ctx, conn, l4.l7Port)
+				continue
+			}
+			// 不是 HTTP 流量，进行 TCP 透传
+			go l4.transmission(ctx, conn.Connection())
 		}
-		if isHttp(conn.Reader) {
-			// Handle HTTP traffic with L7 proxy
-			go l4.transferToL7(ctx, conn, l4.l7Port)
-			continue
-		}
-		// 不是 HTTP 流量，进行 TCP 透传
-		go l4.transmission(ctx, conn.Connection())
 	}
 }
 
@@ -67,22 +74,41 @@ func (l4 *L4Proxy) transmission(ctx context.Context, conn net.Conn) {
 		klog.Errorf("dial to target %s failed with error: %+v", originalDst.String(), err)
 		return
 	}
-	defer targetConn.Close()
+	done := make(chan struct{})
+	defer close(done)
+
+	go func() {
+		select {
+		case <-done: // 正常结束
+			conn.Close()
+			targetConn.Close()
+		case <-ctx.Done():
+			conn.Close()
+			targetConn.Close()
+		}
+	}()
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer conn.Close()
-		_, gerr := io.Copy(targetConn, conn)
-		if gerr != nil {
-			klog.Errorf("copy from conn to targetConn failed with error: %+v", gerr)
+		if _, err := io.Copy(targetConn, conn); err != nil {
+			klog.Errorf("copy from conn to targetConn failed with error: %+v", err)
+		}
+		if tcpConn, ok := targetConn.(*net.TCPConn); ok {
+			tcpConn.CloseWrite()
 		}
 	}()
-	_, err = io.Copy(conn, targetConn)
-	if err != nil {
-		klog.Errorf("copy from targetConn to conn failed with error: %+v", err)
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if _, err = io.Copy(conn, targetConn); err != nil {
+			klog.Errorf("copy from targetConn to conn failed with error: %+v", err)
+		}
+		if tcpConn, ok := conn.(*net.TCPConn); ok {
+			tcpConn.CloseWrite()
+		}
+	}()
 	wg.Wait()
 }
 
@@ -109,7 +135,6 @@ func (l4 *L4Proxy) transferToL7(ctx context.Context, conn *IoWR, l7Port int) {
 	}()
 
 	wg := sync.WaitGroup{}
-
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -120,7 +145,6 @@ func (l4 *L4Proxy) transferToL7(ctx context.Context, conn *IoWR, l7Port int) {
 			tcpConn.CloseWrite()
 		}
 	}()
-
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -131,7 +155,6 @@ func (l4 *L4Proxy) transferToL7(ctx context.Context, conn *IoWR, l7Port int) {
 			tcpConn.CloseWrite()
 		}
 	}()
-
 	wg.Wait()
 }
 
