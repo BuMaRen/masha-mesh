@@ -35,11 +35,16 @@ to quickly create a Cobra application.`,
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				// 启动l4/l7代理服务器
+				// l4 监听 A 端口，l7 监听 B 端口
+				// TODO：l7需要处理回流请求到app，回报直接写入net.Conn
 				proxyServer.Run(ctx)
 			}()
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				// 启动http服务器，用于l4/l7代理服务器所注册的服务
+				// 走往注册服务的流量都会由l4/l7代理服务器接管
 				if err := httpServer.Run(ctx); err != nil {
 					klog.Errorf("http server run failed with error: %+v", err)
 				}
