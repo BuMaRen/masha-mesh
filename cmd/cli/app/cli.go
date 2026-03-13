@@ -29,6 +29,7 @@ to quickly create a Cobra application.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			svcCache := cli.NewServiceCache(opts.cacheCapacity)
 			meshClient := cli.NewMeshClient(opts.uid, svcCache)
+			meshClient.Connect(opts.target)
 			proxyServer, httpServer := opts.Complete(meshClient, cli.NewServiceContext())
 			ctx := rootContext()
 			wg := sync.WaitGroup{}
