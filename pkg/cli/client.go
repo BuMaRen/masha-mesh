@@ -47,7 +47,8 @@ func (c *MeshClient) Connect(target string) {
 
 }
 
-func (c *MeshClient) Unsubscribe(ctx context.Context, serviceName string) error {
+func (c *MeshClient) Unsubscribe(_ context.Context, serviceName string) error {
+	c.serviceCache.onDelete(serviceName)
 	return nil
 }
 

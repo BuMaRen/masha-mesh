@@ -42,7 +42,7 @@ spec:
       serviceAccountName: mesh-ctrl
       containers:
       - name: mesh-ctrl
-        image: hjmasha/mesh-ctrl:v0.1.42
+        image: hjmasha/mesh-ctrl:v0.1.53
         command: ["/app/mesh-ctrl"]
         args: ["-p", "50051", "-n", "default"]
         resources:

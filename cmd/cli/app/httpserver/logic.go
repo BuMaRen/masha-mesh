@@ -19,5 +19,5 @@ func (s *HttpServer) unsubscribe(serviceName string) error {
 		return fmt.Errorf("service %v not found", serviceName)
 	}
 	cancel()
-	return nil
+	return s.client.Unsubscribe(context.TODO(), serviceName)
 }

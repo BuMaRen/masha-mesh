@@ -2,12 +2,12 @@ package proxy
 
 import (
 	"context"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 
 	"github.com/BuMaRen/mesh/pkg/cli"
+	"k8s.io/klog/v2"
 )
 
 type L7OptionsFunc func(*L7Proxy)
@@ -43,11 +43,15 @@ func (l7 *L7Proxy) Run(ctx context.Context) error {
 
 func (l7 *L7Proxy) handleRequest(w http.ResponseWriter, r *http.Request) {
 	// Create reverse proxy
-	proxy := &httputil.ReverseProxy{Transport: l7}
+	// Director 留空是因为实际的目标地址改写在 RoundTrip 中完成
+	proxy := &httputil.ReverseProxy{
+		Transport: l7,
+		Director:  func(req *http.Request) {},
+	}
 
 	// Add custom error handler
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("L7 Proxy: Error forwarding: %v", err)
+		klog.Errorf("L7 Proxy: Error forwarding request: %v", err)
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 	}
 

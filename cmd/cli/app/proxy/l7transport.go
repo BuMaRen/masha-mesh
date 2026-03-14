@@ -1,8 +1,10 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -40,42 +42,29 @@ import (
 // The Request's URL and Header fields must be initialized.
 func (l7 *L7Proxy) RoundTrip(req *http.Request) (*http.Response, error) {
 	svrHost, svrPort, isService := serviceAsHost(req.Host)
+	klog.Infof("L7 Proxy: Received request for host: %s, service: %s, port: %s", req.Host, svrHost, svrPort)
 	if !isService {
+		req.URL.Scheme = "http"
+		if req.URL.Host == "" {
+			req.URL.Host = req.Host
+		}
 		// source request has specified host ip
 		return http.DefaultTransport.RoundTrip(req)
 	}
 
-	defer req.Body.Close()
-	// get all endpoint ip of service
-	// source request use service name as host
+	buffer, err := getBodyBytes(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read request body: %+v", err)
+	}
+
 	eps := l7.availableEndpoints(svrHost)
 	for _, ep := range eps {
-		// TODO: body 是 nil 或者 body 是流，无法拷贝
-		newBody, err := req.GetBody()
+		klog.Infof("L7 Proxy: Attempting to proxy request to endpoint: %s:%s", ep, svrPort)
+		resp, err := doCopiedRequest(req, buffer, ep, svrPort)
 		if err != nil {
-			// TODO: can error be returned?
-			return nil, fmt.Errorf("proxy get body failed with error: %+v", err)
-		}
-
-		// 拷贝一个新的请求
-		toCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		reqCopy := req.Clone(toCtx)
-		reqCopy.URL.Scheme = "http"
-		reqCopy.Host = ep + ":" + svrPort
-		reqCopy.URL.Host = ep + ":" + svrPort
-		reqCopy.Body = newBody
-		resp, err := http.DefaultClient.Do(reqCopy)
-		cancel()
-
-		// 处理失败重试的场景
-		if err != nil {
-			klog.Warningf("request failed with error: %+v", err)
 			continue
 		}
-		if resp.StatusCode < 500 {
-			return resp, nil
-		}
-		resp.Body.Close()
+		return resp, nil
 	}
 	return nil, fmt.Errorf("proxy failed to get response from all endpoints")
 }
@@ -99,4 +88,38 @@ func (l7 *L7Proxy) availableEndpoints(serviceName string) []string {
 		result = append(result, ep[0])
 	}
 	return result
+}
+
+func getBodyBytes(req *http.Request) ([]byte, error) {
+	if req.Body == nil {
+		return []byte{}, nil
+	}
+	defer req.Body.Close()
+	buffer, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	return buffer, nil
+}
+
+func doCopiedRequest(req *http.Request, body []byte, ip, port string) (*http.Response, error) {
+	toCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	reqCopy := req.Clone(toCtx)
+	reqCopy.URL.Scheme = "http"
+	reqCopy.Host = ip + ":" + port
+	reqCopy.URL.Host = ip + ":" + port
+	reqCopy.RequestURI = ""
+	reqCopy.Body = io.NopCloser(bytes.NewReader(body))
+	resp, err := http.DefaultClient.Do(reqCopy)
+	if err != nil {
+		klog.Warningf("request failed with error: %+v", err)
+		return nil, err
+	}
+	if resp.StatusCode >= 500 {
+		klog.Warningf("request to %s:%s failed with status code: %d", ip, port, resp.StatusCode)
+		resp.Body.Close()
+		return nil, fmt.Errorf("request to %s:%s failed with status code: %d", ip, port, resp.StatusCode)
+	}
+	return resp, nil
 }
