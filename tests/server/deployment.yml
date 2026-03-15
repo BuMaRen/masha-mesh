@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-svr
+  namespace: default
+  labels:
+    app: test-svr
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8081
+      targetPort: test-svr-port
+      name: test-svr-port
+      protocol: TCP
+  selector:
+    app: test-svr
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-svr
+spec:
+  selector:
+    matchLabels:
+      app: test-svr
+  template:
+    metadata:
+      labels:
+        app: test-svr
+    spec:
+      initContainers:
+      - name: init-iptables
+        image: wbitt/network-multitool:minimal
+        securityContext:
+          capabilities:
+            add: ["NET_ADMIN"]
+        command:
+        - sh
+        - -c
+        - |
+          # 由 uid 1337 的进程发出的流量不被重定向到 15001 端口
+          iptables -t nat -A OUTPUT \
+            -m owner --uid-owner 1337 \
+            -j RETURN
+
+          # 目标为 127.0.0.1 的流量不劫持
+          iptables -t nat -A OUTPUT \
+            -d 127.0.0.1/32 \
+            -j RETURN
+
+          # 劫持发往监听端口的本身的连接不再重定向
+          iptables -t nat -A OUTPUT \
+            -p tcp --dport 15001 \
+            -j RETURN
+
+          # 所有出站的 TCP 流量都重定向到 15001 端口
+          iptables -t nat -A OUTPUT \
+            -p tcp \
+            -j REDIRECT --to-port 15001
+          
+          # 已到达 15001 的入站流量不再重定向，避免环路
+          iptables -t nat -A PREROUTING \
+            -p tcp --dport 15001 \
+            -j RETURN
+
+          # 更新动态配置的端口
+          iptables -t nat -A PREROUTING \
+            -p tcp --dport 9090 \
+            -j RETURN
+
+          # 所有入站 TCP 流量重定向到 15001 端口
+          iptables -t nat -A PREROUTING \
+            -p tcp \
+            -j REDIRECT --to-port 15001
+      containers:
+      - name: test-svr
+        image: hjmasha/test-svr:v0.1.2
+        command: ["/app/test-svr"]
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+        ports:
+        - containerPort: 8081
+          name: test-svr-port
+      - name: proxy
+        image: hjmasha/mesh-cli:v0.1.53
+        command: ["/app/mesh-cli"]
+        securityContext:
+          runAsGroup: 1337
+          runAsUser: 1337
+          runAsNonRoot: true
+        ports:
+        # - containerPort: 15001
+        #   name: l4proxy
+        - containerPort: 9090
+          name: config-port
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "100m"
+          limits:
+            memory: "64Mi"
+            cpu: "200m"
