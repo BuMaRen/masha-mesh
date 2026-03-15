@@ -64,19 +64,18 @@ auto_increment_version() {
 # 更新deployment.yml文件中的版本号
 update_deployment_file() {
     local file="$1"
-    local old_version="$2"
-    local new_version="$3"
-    
-    log_info "更新 $file 中的版本号: v$old_version -> $new_version"
-    
-    # 检测文件中的镜像类型（ctrl或cli）并替换
+    local new_version="$2"
+
+    log_info "更新 $file 中的镜像版本 -> $new_version"
+
+    # 直接按镜像名替换tag，不依赖旧版本号，避免ctrl/cli版本不一致时替换失败
     # 兼容macOS和Linux的sed -i语法
     if [[ "$OSTYPE" == "darwin"* ]] || sed --version 2>&1 | grep -q "BSD"; then
         # macOS/BSD sed需要提供备份扩展名参数，使用空字符串表示不备份
-        sed -i '' "s|hjmasha/mesh-ctrl:v${old_version}|hjmasha/mesh-ctrl:${new_version}|g; s|hjmasha/mesh-cli:v${old_version}|hjmasha/mesh-cli:${new_version}|g" "$file"
+        sed -E -i '' "s#(hjmasha/mesh-(ctrl|cli)):[^[:space:]]+#\\1:${new_version}#g" "$file"
     else
         # GNU sed
-        sed -i "s|hjmasha/mesh-ctrl:v${old_version}|hjmasha/mesh-ctrl:${new_version}|g; s|hjmasha/mesh-cli:v${old_version}|hjmasha/mesh-cli:${new_version}|g" "$file"
+        sed -E -i "s#(hjmasha/mesh-(ctrl|cli)):[^[:space:]]+#\\1:${new_version}#g" "$file"
     fi
 }
 
@@ -91,6 +90,8 @@ main() {
     # 获取当前版本号
     local ctrl_file="${BUILD_DIR}/ctrl/deployment.yml"
     local cli_file="${BUILD_DIR}/cli/deployment.yml"
+    local test_client_file="${SCRIPT_DIR}/tests/client/deployment.yml"
+    local test_server_file="${SCRIPT_DIR}/tests/server/deployment.yml"
     
     local current_version=$(get_current_version "$ctrl_file")
     
@@ -123,7 +124,12 @@ main() {
         echo "步骤2: 更新以下文件中的版本号："
         echo "  - ${ctrl_file}"
         echo "  - ${cli_file}"
+        echo "  - ${test_client_file} (仅 mesh-cli 镜像)"
+        echo "  - ${test_server_file} (仅 mesh-cli 镜像)"
         echo "步骤3: 在 build 目录执行 make all"
+        echo "步骤4: 执行 kubectl apply"
+        echo "  - kubectl apply -f ${test_client_file}"
+        echo "  - kubectl apply -f ${test_server_file}"
         echo ""
         log_info "DRY RUN 完成。使用不带 --dry-run 参数执行实际部署"
         return 0
@@ -137,18 +143,28 @@ main() {
     # 步骤2: 更新deployment.yml文件
     log_info "步骤2: 更新deployment.yml文件中的版本号"
     
-    update_deployment_file "$ctrl_file" "$current_version" "$new_version"
-    update_deployment_file "$cli_file" "$current_version" "$new_version"
+    update_deployment_file "$ctrl_file" "$new_version"
+    update_deployment_file "$cli_file" "$new_version"
+    update_deployment_file "$test_client_file" "$new_version"
+    update_deployment_file "$test_server_file" "$new_version"
     
     # 步骤3: 部署到本地Kubernetes集群
     log_info "步骤3: 部署到本地Kubernetes集群"
     cd "$BUILD_DIR"
     make all
+
+    # 步骤4: 更新测试环境deployment
+    log_info "步骤4: 应用 tests deployment 配置"
+    cd "$SCRIPT_DIR"
+    kubectl apply -f "$test_client_file"
+    kubectl apply -f "$test_server_file"
     
     log_info "部署完成！版本: ${new_version}"
     log_info "已更新的文件:"
     log_info "  - ${ctrl_file}"
     log_info "  - ${cli_file}"
+    log_info "  - ${test_client_file}"
+    log_info "  - ${test_server_file}"
 }
 
 # 显示帮助信息
@@ -177,7 +193,9 @@ show_help() {
 功能:
     1. 在根目录执行 make push VERSION=vX.X.XX
     2. 更新 build/ctrl/deployment.yml 和 build/cli/deployment.yml 中的镜像版本
-    3. 在 build 目录执行 make all 部署到本地Kubernetes集群
+    3. 更新 tests/client/deployment.yml 和 tests/server/deployment.yml 中 mesh-cli 镜像版本
+    4. 在 build 目录执行 make all 部署到本地Kubernetes集群
+    5. 自动 kubectl apply tests/client/deployment.yml 与 tests/server/deployment.yml
 EOF
 }
 
