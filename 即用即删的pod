@@ -1,1 +1,0 @@
-kubectl run curl-test --rm -it --restart=Never --image=curlimages/curl -- sh

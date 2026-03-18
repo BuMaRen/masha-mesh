@@ -1,16 +1,6 @@
 #!/bin/bash
 
-# 部署自动化脚本
-# 使用方法: 
-#   ./deploy.sh [VERSION]
-#   ./deploy.sh --dry-run [VERSION]
-#   如果不指定VERSION，将自动从现有版本号递增
-
 set -e
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="${SCRIPT_DIR}/build"
-DRY_RUN=false
 
 # 颜色输出
 RED='\033[0;31m'
@@ -18,208 +8,285 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# 打印信息函数
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
+echo -e "${YELLOW}=== Kubernetes Sidecar Injector Webhook 部署脚本 ===${NC}\n"
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# 从deployment.yml文件中提取当前版本号
-get_current_version() {
-    local file="$1"
-    if [ ! -f "$file" ]; then
-        echo ""
-        return
-    fi
+# 检查必要工具
+check_tools() {
+    echo -e "${YELLOW}检查必要工具...${NC}"
     
-    # 提取image行中的版本号（使用sed更便携）
-    # 使用 [^:]* 匹配 ctrl 或 cli，避免 BSD sed 不支持 \| 的问题
-    local version=$(sed -n 's/.*image:.*hjmasha\/mesh-[^:]*:v\([0-9.]*\).*/\1/p' "$file" | head -1)
-    echo "$version"
+    for tool in kubectl openssl docker; do
+        if ! command -v $tool &> /dev/null; then
+            echo -e "${RED}❌ 缺少 $tool 工具${NC}"
+            exit 1
+        fi
+    done
+    
+    echo -e "${GREEN}✓ 所有工具都已安装${NC}\n"
 }
 
-# 自动递增版本号
-auto_increment_version() {
-    local current="$1"
+# 生成自签名证书
+generate_certs() {
+    echo -e "${YELLOW}生成自签名证书...${NC}"
     
-    # 提取v0.1.xx中的xx部分
-    if [[ $current =~ ^([0-9]+\.[0-9]+\.)([0-9]+)$ ]]; then
-        local prefix="${BASH_REMATCH[1]}"
-        local number="${BASH_REMATCH[2]}"
-        local new_number=$((number + 1))
-        echo "v${prefix}${new_number}"
+    CERT_DIR="./certs"
+    mkdir -p "$CERT_DIR"
+    
+    # 生成私钥
+    openssl genrsa -out "$CERT_DIR/tls.key" 2048
+    
+    # 创建一个 SAN 配置文件，用于生成包含 SAN 的证书
+    SAN_CONFIG="$CERT_DIR/san.conf"
+    cat > "$SAN_CONFIG" << EOF
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+CN = sidecar-injector.webhook-system.svc
+
+[v3_req]
+subjectAltName = DNS:sidecar-injector.webhook-system.svc,DNS:sidecar-injector.webhook-system,DNS:localhost,IP:127.0.0.1
+EOF
+    
+    # 生成证书签名请求（带 SAN）
+    openssl req -new \
+        -key "$CERT_DIR/tls.key" \
+        -out "$CERT_DIR/tls.csr" \
+        -config "$SAN_CONFIG"
+    
+    # 生成自签名证书（带 SAN）
+    openssl x509 -req \
+        -days 365 \
+        -in "$CERT_DIR/tls.csr" \
+        -signkey "$CERT_DIR/tls.key" \
+        -out "$CERT_DIR/tls.crt" \
+        -extensions v3_req \
+        -extfile "$SAN_CONFIG"
+    
+    echo -e "${GREEN}✓ 证书生成完成${NC}\n"
+}
+
+# 构建 Docker 镜像
+build_image() {
+    echo -e "${YELLOW}构建 Docker 镜像...${NC}"
+    
+    # 检查是否在 minikube 环境中
+    if kubectl config current-context | grep -q minikube; then
+        echo "检测到 minikube 环境，将镜像加载到 minikube..."
+        eval $(minikube docker-env)
     else
-        log_error "无法解析版本号格式: $current"
+        echo -e "${RED}❌ 当前 kubectl context 不是 minikube，请先执行: minikube start${NC}"
         exit 1
     fi
+    
+    docker build -t sidecar-injector:latest .
+    
+    echo -e "${GREEN}✓ Docker 镜像构建完成${NC}\n"
 }
 
-# 更新deployment.yml文件中的版本号
-update_deployment_file() {
-    local file="$1"
-    local new_version="$2"
+# 创建命名空间
+create_namespace() {
+    echo -e "${YELLOW}创建命名空间...${NC}"
+    
+    kubectl create namespace webhook-system || true
+    
+    echo -e "${GREEN}✓ 命名空间创建完成${NC}\n"
+}
 
-    log_info "更新 $file 中的镜像版本 -> $new_version"
+# 创建 ConfigMap 包含证书
+create_configmap() {
+    echo -e "${YELLOW}创建 ConfigMap 包含证书...${NC}"
+    
+    CERT_DIR="./certs"
+    
+    # 删除旧的 ConfigMap（如果存在）
+    kubectl delete configmap webhook-certs -n webhook-system --ignore-not-found=true
+    
+    # 直接创建新的 ConfigMap，避免使用 --dry-run 导致数据丢失
+    kubectl create configmap webhook-certs \
+        --from-file=tls.crt="$CERT_DIR/tls.crt" \
+        --from-file=tls.key="$CERT_DIR/tls.key" \
+        -n webhook-system
+    
+    echo -e "${GREEN}✓ ConfigMap 创建完成${NC}\n"
+}
 
-    # 直接按镜像名替换tag，不依赖旧版本号，避免ctrl/cli版本不一致时替换失败
-    # 兼容macOS和Linux的sed -i语法
-    if [[ "$OSTYPE" == "darwin"* ]] || sed --version 2>&1 | grep -q "BSD"; then
-        # macOS/BSD sed需要提供备份扩展名参数，使用空字符串表示不备份
-        sed -E -i '' "s#(hjmasha/mesh-(ctrl|cli)):[^[:space:]]+#\\1:${new_version}#g" "$file"
+# 部署 Webhook
+deploy_webhook() {
+    echo -e "${YELLOW}部署 Webhook...${NC}"
+    
+    CERT_DIR="./certs"
+    
+    # 兼容 macOS 和 Linux 的 base64 编码
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        CA_BUNDLE=$(cat "$CERT_DIR/tls.crt" | base64 | tr -d '\n')
     else
-        # GNU sed
-        sed -E -i "s#(hjmasha/mesh-(ctrl|cli)):[^[:space:]]+#\\1:${new_version}#g" "$file"
+        CA_BUNDLE=$(cat "$CERT_DIR/tls.crt" | base64 -w 0)
     fi
+    
+    # 创建临时文件用于 sed 替换，排除 ConfigMap 部分
+    TEMP_YAML=$(mktemp)
+    trap "rm -f $TEMP_YAML" EXIT
+    
+    # 使用 awk 排除 ConfigMap 部分（从 kind: ConfigMap 到下一个 --- 之前）
+    awk '
+        /^kind: ConfigMap/ { skip=1; next }
+        /^---$/ && skip { skip=0; next }
+        !skip { print }
+    ' k8s-webhook.yaml | \
+    sed "s|caBundle: \"\"|caBundle: $CA_BUNDLE|g" > "$TEMP_YAML"
+    
+    kubectl apply -f "$TEMP_YAML"
+    
+    echo -e "${GREEN}✓ Webhook 部署完成${NC}\n"
+}
+
+# 等待 Deployment 就绪
+wait_for_deployment() {
+    echo -e "${YELLOW}等待 Deployment 就绪...${NC}"
+    
+    kubectl rollout status deployment/sidecar-injector -n webhook-system --timeout=60s
+    
+    echo -e "${GREEN}✓ Deployment 已就绪${NC}\n"
+}
+
+# 创建测试命名空间
+create_test_namespace() {
+    echo -e "${YELLOW}创建测试命名空间...${NC}"
+    
+    kubectl create namespace test-sidecar || true
+    kubectl label namespace test-sidecar sidecar-injection=enabled --overwrite
+    
+    echo -e "${GREEN}✓ 测试命名空间创建完成${NC}\n"
+}
+
+# 测试 Webhook
+test_webhook() {
+    echo -e "${YELLOW}测试 Webhook...${NC}"
+    
+    cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod
+  namespace: test-sidecar
+spec:
+  containers:
+  - name: app
+    image: nginx:latest
+    ports:
+    - containerPort: 80
+EOF
+
+    echo -e "${GREEN}✓ 测试 Pod 已创建${NC}\n"
+    
+    echo -e "${YELLOW}检查 Pod 中是否已注入 sidecar...${NC}"
+    sleep 2
+    
+    kubectl get pod test-pod -n test-sidecar -o jsonpath='{.spec.containers[*].name}' | grep -q sidecar-injected
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓ Sidecar 注入成功！${NC}\n"
+    else
+        echo -e "${RED}❌ Sidecar 注入失败${NC}\n"
+    fi
+}
+
+# 显示日志
+show_logs() {
+    echo -e "${YELLOW}Webhook 服务器日志:${NC}"
+    kubectl logs -n webhook-system deployment/sidecar-injector -f --tail=50
+}
+
+# 清理函数
+cleanup() {
+    echo -e "${YELLOW}清理资源...${NC}"
+    
+    read -p "是否删除所有部署的资源? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        kubectl delete namespace webhook-system test-sidecar || true
+        rm -rf ./certs
+        echo -e "${GREEN}✓ 清理完成${NC}\n"
+    fi
+}
+
+# 显示使用帮助
+show_help() {
+    cat <<EOF
+${GREEN}Kubernetes Sidecar Injector Webhook 部署脚本${NC}
+
+前置要求:
+    • kubectl 已安装
+    • minikube 已安装并运行 (minikube start)
+    • Docker 已安装
+    • openssl 已安装（通常包含在 macOS 中）
+
+使用方法:
+    $0 [命令]
+
+命令:
+    deploy      - 完整部署（生成证书、构建镜像、部署到 K8s）
+    certs       - 仅生成证书
+    build       - 仅构建 Docker 镜像
+    test        - 测试 Webhook 功能
+    logs        - 显示 Webhook 日志
+    cleanup     - 清理所有资源（仅删除 K8s 中的资源和本地 ./certs）
+    help        - 显示帮助信息
+
+注意:
+    • 所有文件都保存在当前目录或其子目录中
+    • 不会修改系统文件或安装全局软件
+    • 生成的证书保存在 ./certs 目录
+
+示例:
+    $0 deploy   # 完整部署
+    $0 logs     # 查看日志
+    $0 cleanup  # 清理资源
+EOF
 }
 
 # 主函数
 main() {
-    if [ "$DRY_RUN" = true ]; then
-        log_info "开始部署流程（DRY RUN 模式）..."
-    else
-        log_info "开始部署流程..."
-    fi
+    check_tools
     
-    # 获取当前版本号
-    local ctrl_file="${BUILD_DIR}/ctrl/deployment.yml"
-    local cli_file="${BUILD_DIR}/cli/deployment.yml"
-    local test_client_file="${SCRIPT_DIR}/tests/client/deployment.yml"
-    local test_server_file="${SCRIPT_DIR}/tests/server/deployment.yml"
-    
-    local current_version=$(get_current_version "$ctrl_file")
-    
-    if [ -z "$current_version" ]; then
-        log_warn "无法从 $ctrl_file 获取当前版本号"
-        current_version="0.1.0"
-    fi
-    
-    log_info "当前版本号: v${current_version}"
-    
-    # 确定新版本号
-    local new_version
-    if [ -n "$1" ]; then
-        # 使用用户指定的版本号
-        new_version="$1"
-        # 移除开头的v（如果有的话）
-        new_version="${new_version#v}"
-        new_version="v${new_version}"
-    else
-        # 自动递增版本号
-        new_version=$(auto_increment_version "$current_version")
-    fi
-    
-    log_info "新版本号: ${new_version}"
-    
-    if [ "$DRY_RUN" = true ]; then
-        log_info "DRY RUN: 将执行以下步骤"
-        echo ""
-        echo "步骤1: 在根目录执行 make push VERSION=${new_version}"
-        echo "步骤2: 更新以下文件中的版本号："
-        echo "  - ${ctrl_file}"
-        echo "  - ${cli_file}"
-        echo "  - ${test_client_file} (仅 mesh-cli 镜像)"
-        echo "  - ${test_server_file} (仅 mesh-cli 镜像)"
-        echo "步骤3: 在 build 目录执行 make all"
-        echo "步骤4: 执行 kubectl apply"
-        echo "  - kubectl apply -f ${test_client_file}"
-        echo "  - kubectl apply -f ${test_server_file}"
-        echo ""
-        log_info "DRY RUN 完成。使用不带 --dry-run 参数执行实际部署"
-        return 0
-    fi
-    
-    # 步骤1: 在根目录执行 make push
-    log_info "步骤1: 编译并推送镜像到DockerHub (VERSION=${new_version})"
-    cd "$SCRIPT_DIR"
-    make push VERSION="${new_version}"
-    
-    # 步骤2: 更新deployment.yml文件
-    log_info "步骤2: 更新deployment.yml文件中的版本号"
-    
-    update_deployment_file "$ctrl_file" "$new_version"
-    update_deployment_file "$cli_file" "$new_version"
-    update_deployment_file "$test_client_file" "$new_version"
-    update_deployment_file "$test_server_file" "$new_version"
-    
-    # 步骤3: 部署到本地Kubernetes集群
-    log_info "步骤3: 部署到本地Kubernetes集群"
-    cd "$BUILD_DIR"
-    make all
-
-    # 步骤4: 更新测试环境deployment
-    log_info "步骤4: 应用 tests deployment 配置"
-    cd "$SCRIPT_DIR"
-    kubectl apply -f "$test_client_file"
-    kubectl apply -f "$test_server_file"
-    
-    log_info "部署完成！版本: ${new_version}"
-    log_info "已更新的文件:"
-    log_info "  - ${ctrl_file}"
-    log_info "  - ${cli_file}"
-    log_info "  - ${test_client_file}"
-    log_info "  - ${test_server_file}"
+    case "${1:-deploy}" in
+        deploy)
+            generate_certs
+            build_image
+            create_namespace
+            create_configmap
+            deploy_webhook
+            wait_for_deployment
+            create_test_namespace
+            test_webhook
+            echo -e "${GREEN}=== 部署完成！ ===${NC}\n"
+            show_logs
+            ;;
+        certs)
+            generate_certs
+            ;;
+        build)
+            build_image
+            ;;
+        test)
+            test_webhook
+            ;;
+        logs)
+            show_logs
+            ;;
+        cleanup)
+            cleanup
+            ;;
+        help)
+            show_help
+            ;;
+        *)
+            echo -e "${RED}未知命令: $1${NC}\n"
+            show_help
+            exit 1
+            ;;
+    esac
 }
 
-# 显示帮助信息
-show_help() {
-    cat << EOF
-部署自动化脚本
-
-使用方法:
-    $0 [OPTIONS] [VERSION]
-
-选项:
-    --dry-run       显示将要执行的步骤，但不实际执行
-    -h, --help      显示此帮助信息
-
-参数:
-    VERSION         可选，指定版本号（例如 v0.1.28 或 0.1.28）
-                    如果不指定，将自动从现有版本号递增
-
-示例:
-    $0                      # 自动递增版本号并部署
-    $0 v0.1.30              # 使用指定版本号 v0.1.30 部署
-    $0 0.1.31               # 使用指定版本号 v0.1.31 部署
-    $0 --dry-run            # 查看将要执行的步骤（自动递增版本）
-    $0 --dry-run v0.1.30    # 查看将要执行的步骤（使用 v0.1.30）
-
-功能:
-    1. 在根目录执行 make push VERSION=vX.X.XX
-    2. 更新 build/ctrl/deployment.yml 和 build/cli/deployment.yml 中的镜像版本
-    3. 更新 tests/client/deployment.yml 和 tests/server/deployment.yml 中 mesh-cli 镜像版本
-    4. 在 build 目录执行 make all 部署到本地Kubernetes集群
-    5. 自动 kubectl apply tests/client/deployment.yml 与 tests/server/deployment.yml
-EOF
-}
-
-# 解析命令行参数
-parse_args() {
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            -h|--help)
-                show_help
-                exit 0
-                ;;
-            --dry-run)
-                DRY_RUN=true
-                shift
-                ;;
-            *)
-                # 剩余参数作为版本号
-                VERSION_ARG="$1"
-                shift
-                ;;
-        esac
-    done
-}
-
-# 解析命令行参数并执行
-parse_args "$@"
-main "$VERSION_ARG"
+main "$@"
