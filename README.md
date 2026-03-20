@@ -29,6 +29,30 @@ for service mesh learning
 ./deploy.sh --help
 ```
 
+## Webhook 一键部署
+
+使用 `deploy-webhook.sh` 可以一键完成 webhook 的编译、推送镜像与 Kubernetes 部署：
+
+```bash
+# 自动递增版本号并部署 webhook
+./deploy-webhook.sh
+
+# 指定版本号部署 webhook
+./deploy-webhook.sh v0.1.54
+# 或者
+./deploy-webhook.sh 0.1.54
+
+# 先预览执行步骤
+./deploy-webhook.sh --dry-run
+```
+
+该脚本会自动完成以下步骤：
+1. 在根目录执行 `make push-webhook VERSION=vX.X.XX`
+2. 更新 `build/webhook/webhook.yml` 中的 webhook 镜像版本
+3. 生成 TLS 证书并创建/更新 `default/test-svc-tls` Secret（服务 `test-svc`）
+4. 自动更新 `build/webhook/webhook.yml` 中的 `caBundle`
+5. 在 `build` 目录执行 `make webhook` 部署到 Kubernetes
+
 ## 手动部署
 
 如果需要手动执行各个步骤：
