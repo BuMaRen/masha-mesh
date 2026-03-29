@@ -12,6 +12,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
 DRY_RUN=false
 
+CERT_DIR="${BUILD_DIR}/certs"
+CERT_FILE="${CERT_DIR}/tls.crt"
+KEY_FILE="${CERT_DIR}/tls.key"
+WEBHOOK_NAMESPACE="default"
+WEBHOOK_SECRET="webhook"
+
 # 颜色输出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -29,6 +35,45 @@ log_warn() {
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+prepare_tls_cert() {
+    log_info "生成 webhook TLS 证书"
+    mkdir -p "$CERT_DIR"
+
+    cd "$SCRIPT_DIR"
+    ./build/certs/self-signed.sh
+
+    if [ ! -f "$CERT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
+        log_error "证书生成失败: 未找到 $CERT_FILE 或 $KEY_FILE"
+        exit 1
+    fi
+}
+
+upsert_tls_secret() {
+    log_info "创建/更新 TLS Secret: ${WEBHOOK_NAMESPACE}/${WEBHOOK_SECRET}"
+    if [ "$WEBHOOK_NAMESPACE" != "default" ]; then
+        kubectl create namespace "$WEBHOOK_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+    fi
+    kubectl -n "$WEBHOOK_NAMESPACE" create secret tls "$WEBHOOK_SECRET" \
+        --cert="$CERT_FILE" \
+        --key="$KEY_FILE" \
+        --dry-run=client -o yaml | kubectl apply -f -
+}
+
+update_ca_bundle() {
+    local file="$1"
+    local cert_file="$2"
+
+    local ca_bundle
+    ca_bundle=$(base64 < "$cert_file" | tr -d '\n')
+
+    log_info "更新 $file 中的 webhook caBundle"
+    if [[ "$OSTYPE" == "darwin"* ]] || sed --version 2>&1 | grep -q "BSD"; then
+        sed -E -i '' "s#(^[[:space:]]*caBundle:).*#\\1 ${ca_bundle}#g" "$file"
+    else
+        sed -E -i "s#(^[[:space:]]*caBundle:).*#\\1 ${ca_bundle}#g" "$file"
+    fi
 }
 
 # 从deployment.yml文件中提取当前版本号
@@ -88,10 +133,8 @@ main() {
     fi
     
     # 获取当前版本号
-    local ctrl_file="${BUILD_DIR}/ctrl/deployment.yml"
+    local ctrl_file="${BUILD_DIR}/ctrl/mesh-ctrl-pod.yaml"
     local cli_file="${BUILD_DIR}/cli/deployment.yml"
-    local test_client_file="${SCRIPT_DIR}/tests/client/deployment.yml"
-    local test_server_file="${SCRIPT_DIR}/tests/server/deployment.yml"
     
     local current_version=$(get_current_version "$ctrl_file")
     
@@ -124,12 +167,9 @@ main() {
         echo "步骤2: 更新以下文件中的版本号："
         echo "  - ${ctrl_file}"
         echo "  - ${cli_file}"
-        echo "  - ${test_client_file} (仅 mesh-cli 镜像)"
-        echo "  - ${test_server_file} (仅 mesh-cli 镜像)"
-        echo "步骤3: 在 build 目录执行 make all"
-        echo "步骤4: 执行 kubectl apply"
-        echo "  - kubectl apply -f ${test_client_file}"
-        echo "  - kubectl apply -f ${test_server_file}"
+        echo "步骤3: 生成 webhook TLS 证书并创建/更新 Secret ${WEBHOOK_NAMESPACE}/${WEBHOOK_SECRET}"
+        echo "步骤4: 更新 ${ctrl_file} 中的 caBundle"
+        echo "步骤5: 在 build 目录执行 make all"
         echo ""
         log_info "DRY RUN 完成。使用不带 --dry-run 参数执行实际部署"
         return 0
@@ -145,26 +185,25 @@ main() {
     
     update_deployment_file "$ctrl_file" "$new_version"
     update_deployment_file "$cli_file" "$new_version"
-    update_deployment_file "$test_client_file" "$new_version"
-    update_deployment_file "$test_server_file" "$new_version"
     
-    # 步骤3: 部署到本地Kubernetes集群
-    log_info "步骤3: 部署到本地Kubernetes集群"
+    # 步骤3: 准备 webhook 证书并更新 Secret
+    log_info "步骤3: 准备 webhook 证书并更新 Secret"
+    prepare_tls_cert
+    upsert_tls_secret
+
+    # 步骤4: 更新 webhook caBundle
+    log_info "步骤4: 更新 webhook caBundle"
+    update_ca_bundle "$ctrl_file" "$CERT_FILE"
+
+    # 步骤5: 部署到本地Kubernetes集群
+    log_info "步骤5: 部署到本地Kubernetes集群"
     cd "$BUILD_DIR"
     make all
 
-    # 步骤4: 更新测试环境deployment
-    log_info "步骤4: 应用 tests deployment 配置"
-    cd "$SCRIPT_DIR"
-    kubectl apply -f "$test_client_file"
-    kubectl apply -f "$test_server_file"
-    
     log_info "部署完成！版本: ${new_version}"
     log_info "已更新的文件:"
     log_info "  - ${ctrl_file}"
     log_info "  - ${cli_file}"
-    log_info "  - ${test_client_file}"
-    log_info "  - ${test_server_file}"
 }
 
 # 显示帮助信息
@@ -192,10 +231,10 @@ show_help() {
 
 功能:
     1. 在根目录执行 make push VERSION=vX.X.XX
-    2. 更新 build/ctrl/deployment.yml 和 build/cli/deployment.yml 中的镜像版本
-    3. 更新 tests/client/deployment.yml 和 tests/server/deployment.yml 中 mesh-cli 镜像版本
-    4. 在 build 目录执行 make all 部署到本地Kubernetes集群
-    5. 自动 kubectl apply tests/client/deployment.yml 与 tests/server/deployment.yml
+    2. 更新 build/ctrl/mesh-ctrl-pod.yaml 和 build/cli/deployment.yml 中的镜像版本
+    3. 自动生成 TLS 证书并创建/更新 default/webhook Secret
+    4. 自动更新 build/ctrl/mesh-ctrl-pod.yaml 的 caBundle
+    5. 在 build 目录执行 make all 部署到本地Kubernetes集群
 EOF
 }
 

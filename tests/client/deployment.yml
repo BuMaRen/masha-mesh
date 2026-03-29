@@ -67,7 +67,7 @@ spec:
             memory: "64Mi"
             cpu: "250m"
       - name: proxy
-        image: hjmasha/mesh-cli:v0.1.53
+        image: hjmasha/mesh-cli:v0.1.58
         command: ["/app/mesh-cli"]
         securityContext:
           runAsGroup: 1337

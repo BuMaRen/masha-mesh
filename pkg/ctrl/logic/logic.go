@@ -1,10 +1,12 @@
-package ctrl
+package logic
 
 import (
 	"context"
 	"fmt"
 	"net"
 
+	"github.com/BuMaRen/mesh/pkg/ctrl"
+	"github.com/BuMaRen/mesh/pkg/ctrl/storage"
 	"google.golang.org/grpc"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -21,8 +23,27 @@ Logic 负责：
 
 type Logic struct {
 	grpcPort             int
-	core                 Storage
+	core                 ctrl.Storage
 	compeletedGrpcServer *grpc.Server
+	httpsServer          *HttpsServer
+}
+
+func (l *Logic) Compelete(opts *Options) error {
+	// https 服务器配置相关，本包调用不用NewHttpsServer，直接在这里初始化，减少包之间的依赖
+	l.httpsServer = &HttpsServer{
+		address:  opts.Address,
+		certFile: opts.Crt,
+		keyFile:  opts.Key,
+	}
+
+	l.grpcPort = opts.GrpcPort
+
+	// grpc 服务器配置相关
+	distributer := NewGrpcServer(opts.MapInitialSize)
+	coreData := storage.NewCoreData(distributer)
+	l.core = coreData
+	l.compeletedGrpcServer = distributer.Compelete(coreData.List)
+	return nil
 }
 
 // WatchEndpointSliceOrDie 启动 informer 监听 EndpointSlice 的变化，并将变化同步到 storage 中
@@ -62,13 +83,6 @@ func (l *Logic) ServeGrpcOrDie(ctx context.Context) error {
 	return err
 }
 
-func NewLogic(grpcPort int) *Logic {
-	distributer := NewGrpcServer()
-	storage := NewCoreData(distributer)
-	compeletedGrpcServer := distributer.Compelete(storage.List)
-	return &Logic{
-		grpcPort:             grpcPort,
-		core:                 storage,
-		compeletedGrpcServer: compeletedGrpcServer,
-	}
+func (l *Logic) ServeHttpsOrDie(ctx context.Context) error {
+	return l.httpsServer.Serve(ctx)
 }

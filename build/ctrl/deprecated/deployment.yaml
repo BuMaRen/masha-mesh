@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mesh-ctrl
+spec:
+  selector:
+    matchLabels:
+      app: mesh-ctrl
+  template:
+    metadata:
+      labels:
+        app: mesh-ctrl
+    spec:
+      serviceAccountName: mesh-ctrl
+      containers:
+      - name: mesh-ctrl
+        image: hjmasha/mesh-ctrl:v0.1.56
+        imagePullPolicy: Always
+        command: ["/app/mesh-ctrl"]
+        args:
+          - "--address"
+          - ":8443"
+          - "--crt"
+          - "/etc/webhook/certs/tls.crt"
+          - "--key"
+          - "/etc/webhook/certs/tls.key"
+          - "--map-initial-size"
+          - "100"
+          - "--port"
+          - "50051"
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+        ports:
+        - containerPort: 50051
+          name: mesh-ctrl-port
+        - containerPort: 8443
+          name: webhook-port
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+            - name: tls-certs
+              mountPath: /etc/webhook/certs
+              readOnly: true
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: webhook

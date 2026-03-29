@@ -1,17 +1,11 @@
-.PHONY: all cli ctrl webhook
+.PHONY: all cli ctrl
 
 all:
 	kubectl apply -f ./cli/deployment.yml
-	kubectl apply -f ./ctrl/deployment.yml
-	kubectl apply -f ./ctrl/service.yml
-	kubectl apply -f ./webhook/webhook.yml
+	kubectl apply -f ./ctrl/mesh-ctrl-pod.yaml
 
 cli:
 	kubectl apply -f ./cli/deployment.yml
 
 ctrl:
-	kubectl apply -f ./ctrl/deployment.yml
-	kubectl apply -f ./ctrl/service.yml
-
-webhook:
-	kubectl apply -f ./webhook/webhook.yml
+	kubectl apply -f ./ctrl/mesh-ctrl-pod.yaml

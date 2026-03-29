@@ -1,4 +1,4 @@
-package ctrl
+package logic
 
 import (
 	"sync"
@@ -9,10 +9,6 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/klog/v2"
 )
-
-const mapInitialSize = 100
-
-type SidecarInformer func(any)
 
 // GrpcServer 实现 Distributer 接口，维护一个 sidecar 列表和对应的 channel
 type GrpcServer struct {
@@ -73,9 +69,9 @@ func (s *GrpcServer) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStre
 	return nil
 }
 
-func NewGrpcServer() *GrpcServer {
+func NewGrpcServer(capacity int) *GrpcServer {
 	return &GrpcServer{
-		sidecars: make(map[string]*utils.Sidecar, mapInitialSize),
+		sidecars: make(map[string]*utils.Sidecar, capacity),
 		mtx:      &sync.RWMutex{},
 	}
 }
@@ -84,11 +80,5 @@ func (s *GrpcServer) Compelete(fn func(string) (*discoveryv1.EndpointSlice, bool
 	s.listFn = fn
 	grpcServer := grpc.NewServer()
 	mesh.RegisterMeshCtrlServer(grpcServer, s)
-	return grpcServer
-}
-
-func NewCompletedGrpcServer() *grpc.Server {
-	grpcServer := grpc.NewServer()
-	mesh.RegisterMeshCtrlServer(grpcServer, NewGrpcServer())
 	return grpcServer
 }

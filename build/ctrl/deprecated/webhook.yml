@@ -1,0 +1,26 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: webhook
+webhooks:
+  - name: webhook.mesh.local
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: Ignore
+    clientConfig:
+      service:
+        namespace: default
+        name: mesh-ctrl
+        path: /mutate
+        port: 443
+      # 占位值；部署脚本会自动替换成实际证书的 base64 内容
+      caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURVakNDQWpxZ0F3SUJBZ0lVSWhSOGtibjNFSUlralRveFg4cjJqRU5ydWc4d0RRWUpLb1pJaHZjTkFRRUwKQlFBd0hqRWNNQm9HQTFVRUF3d1RkMlZpYUc5dmF5NWtaV1poZFd4MExuTjJZekFlRncweU5qQXpNamt4TlRReQpOREJhRncweU56QXpNamt4TlRReU5EQmFNQjR4SERBYUJnTlZCQU1NRTNkbFltaHZiMnN1WkdWbVlYVnNkQzV6CmRtTXdnZ0VpTUEwR0NTcUdTSWIzRFFFQkFRVUFBNElCRHdBd2dnRUtBb0lCQVFESkpPbnp6UHNEdUxUSWIyU1EKUU5JQURNMW84MTh1azV6cDFmM1dBNVNLWWdWOFMrUExJOGFlaitjT2xTNmlHK0FYejBMQ0FoMWJPQ0pwNkRobApBcU51aDFjWnVRdWRoNjU5T1psa2NEU21PUVdWLzg4c1FueXRNYXptTEh5U0QwcTI1V1hVSVZpUmt2RzhWMFFaClBkbGRJVFVLU1JyUkRiUml3Nng2Y0JpNjVrZ1pmVTBHRyszdHlTRlJITmQxMytWeFlpRW5QYXRFUVc4QnBKWHMKQWNZUDZpSStzK1owcWVVcVl5RDA1VGlSWlhSZ0xVZjJ6RUhaUmszMDZ3cTJpaGw4bVIzREF5MEJlWkRRMzFnYgpDQ01uUFFPUW1zODQzOURoNXlkU1B0TGVKWGpxeUNEWTVQN2VZa3lvaW0xNWx3eTZ3RCtzVHlyWXpYcmFwUHVLCm9DM25BZ01CQUFHamdZY3dnWVF3WXdZRFZSMFJCRnd3V29JaGQyVmlhRzl2YXk1a1pXWmhkV3gwTG5OMll5NWoKYkhWemRHVnlMbXh2WTJGc2doTjNaV0pvYjI5ckxtUmxabUYxYkhRdWMzWmpnZzkzWldKb2IyOXJMbVJsWm1GMQpiSFNDQ1d4dlkyRnNhRzl6ZEljRWZ3QUFBVEFkQmdOVkhRNEVGZ1FVRmZnc0hpMjZaalRtVlhRNnRkQTN0MHhtClFnb3dEUVlKS29aSWh2Y05BUUVMQlFBRGdnRUJBQUx2eWxKYXFxckQvSlVDWW9PSjVmdStqM0lTWUJEM0VwaGIKWkkxOHRMK1lNcHBYNXRKT0tVNDZoRDYvYjlEUVN3dmdMb2xKL1krK0lSbktVTmsxbmY0RGRaNEJxVkoyRTg5egpYMmd3c2xZdENxeFVLYmMzalU3dXppaEJVSDRoQjJUK0d5dmtPU2FlcDllaXB0bHpNcWdUZDg3bjhKUmp4UnFFClcya09TTHF5SG4va2NJczkxQzhtK0gxNmgxUmkzbkdhL3JZalpiSUd6am54V285c0ptK25zT2JPcTBhQmhGQlUKdkpaOG1DVGVoaE9Ga3M1R3lBTnBLTWZKSkJsY25RLzQxaHFaczg4cCtnek5qZDN1UUhmc0ZINmQ5MVJsUWQ4bQpRVFZDTy90QlRtWHhpbHp2Nm44S0ZYMm5TTGJod0FMcG5XKzVyd2w0a1o0b0liN3dYQlU9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+    matchConditions:
+      - name: "match-pods"
+        # 带有label masha-webhook=enabled 的 Pod 会被 webhook 处理。
+        expression: "object.metadata.labels['masha-webhook'] == 'enabled'"
+    rules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]

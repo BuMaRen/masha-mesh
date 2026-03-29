@@ -1,13 +1,12 @@
 package app
 
 import (
-	"os"
-
+	"github.com/BuMaRen/mesh/pkg/ctrl/logic"
 	"github.com/spf13/cobra"
 )
 
 func NewCommand() *cobra.Command {
-	opts := NewOptions()
+	opts := logic.NewOptions()
 	rootCmd := &cobra.Command{
 		Use:   "mesh-ctrl",
 		Short: "A brief description of your application",
@@ -19,12 +18,21 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 		// Uncomment the following line if your bare application
 		// has an action associated with it:
-		Run: func(cmd *cobra.Command, args []string) {
-			opts.Run()
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svr := &logic.Logic{}
+			if err := svr.Compelete(opts); err != nil {
+				return err
+			}
+			return Serve(svr)
 		},
 	}
-	rootCmd.Flags().StringVarP(&opts.Namespace, "namespace", "n", "default", "Namespace to use")
-	rootCmd.Flags().IntVarP(&opts.Port, "port", "p", 50051, "Port to listen on")
-	opts.PodName = os.Getenv("POD_NAME")
+
+	rootCmd.Flags().IntVarP(&opts.GrpcPort, "port", "p", 50051, "grpc server port")
+	rootCmd.Flags().StringVarP(&opts.Crt, "crt", "", "", "https server crt file")
+	rootCmd.Flags().StringVarP(&opts.Key, "key", "", "", "https server key file")
+	rootCmd.Flags().StringVarP(&opts.Address, "address", "a", "0.0.0.0:8443", "https server address")
+	rootCmd.Flags().IntVarP(&opts.MapInitialSize, "map-initial-size", "", 1024, "initial size of the map")
+	rootCmd.MarkFlagRequired("crt")
+	rootCmd.MarkFlagRequired("key")
 	return rootCmd
 }

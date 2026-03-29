@@ -1,4 +1,4 @@
-package ctrl
+package storage
 
 import (
 	"github.com/BuMaRen/mesh/pkg/ctrl/utils"

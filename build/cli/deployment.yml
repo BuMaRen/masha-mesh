@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
       - name: mesh-cli
-        image: hjmasha/mesh-cli:v0.1.53
+        image: hjmasha/mesh-cli:v0.1.59
         command: ["/app/mesh-cli"]
         resources:
           limits:

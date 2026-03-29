@@ -1,13 +1,14 @@
-package ctrl
+package storage
 
 import (
 	"github.com/BuMaRen/mesh/pkg/api/mesh"
+	"github.com/BuMaRen/mesh/pkg/ctrl"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/klog/v2"
 )
 
 type CoreData struct {
-	distributer Distributer
+	distributer ctrl.Distributer
 	// serviceMap 存放一个 service 对应的多个 EndpointSlice，key 是 service 的名字，value 是 EndpointSlice 对象
 	serviceMap map[string]*EndpointSlice
 }
@@ -79,7 +80,7 @@ func (d *CoreData) OnDeleted(obj any) {
 	klog.Infof("Deleted EndpointSlice for service %s with version %s", svcName, serviceEs.ObjectMeta.ResourceVersion)
 }
 
-func NewCoreData(distributer Distributer) *CoreData {
+func NewCoreData(distributer ctrl.Distributer) *CoreData {
 	return &CoreData{
 		distributer: distributer,
 		serviceMap:  make(map[string]*EndpointSlice),

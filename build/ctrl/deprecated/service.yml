@@ -8,8 +8,13 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 50051
+    - name: grpc
+      port: 50051
       targetPort: mesh-ctrl-port
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: webhook-port
       protocol: TCP
   selector:
     app: mesh-ctrl

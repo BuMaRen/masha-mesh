@@ -10,6 +10,7 @@ spec:
     metadata:
       labels:
         app: test-pod
+        masha-webhook: enabled
     spec:
       containers:
       - name: test-pod

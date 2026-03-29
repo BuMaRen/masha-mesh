@@ -7,23 +7,9 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/BuMaRen/mesh/pkg/ctrl"
+	"github.com/BuMaRen/mesh/pkg/ctrl/logic"
 	"k8s.io/klog/v2"
 )
-
-type Options struct {
-	Namespace string
-	Port      int
-	PodName   string
-}
-
-func NewOptions() *Options {
-	return &Options{
-		Namespace: "default",
-		Port:      50051,
-		PodName:   "node1",
-	}
-}
 
 func WithSignalCatch(root context.Context) context.Context {
 	ctx, cancel := context.WithCancel(root)
@@ -42,12 +28,10 @@ func WithSignalCatch(root context.Context) context.Context {
 	return ctx
 }
 
-func (o *Options) Run() {
-	// rootContext := WithSignalCatch(context.Background())
-	rootContext := context.Background()
+func Serve(l *logic.Logic) error {
+	rootContext := WithSignalCatch(context.Background())
 	workingContext, cancel := context.WithCancel(rootContext)
 	defer cancel()
-	l := ctrl.NewLogic(o.Port)
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -64,5 +48,15 @@ func (o *Options) Run() {
 			cancel()
 		}
 	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := l.ServeHttpsOrDie(workingContext); err != nil {
+			klog.Errorf("Failed to serve HTTPS: %v", err)
+			cancel()
+		}
+	}()
 	wg.Wait()
+	return nil
 }

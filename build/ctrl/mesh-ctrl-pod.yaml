@@ -1,0 +1,131 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mesh-ctrl
+rules:
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["services", "endpointslices"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mesh-ctrl
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mesh-ctrl
+subjects:
+  - kind: ServiceAccount
+    name: mesh-ctrl
+    namespace: default
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mesh-ctrl
+  namespace: default
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mesh-ctrl
+  namespace: default
+  labels:
+    app: mesh-ctrl
+spec:
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: mesh-ctrl-port
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: webhook-port
+      protocol: TCP
+  selector:
+    app: mesh-ctrl
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: webhook
+webhooks:
+  - name: webhook.mesh.local
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: Ignore
+    clientConfig:
+      service:
+        namespace: default
+        name: mesh-ctrl
+        path: /mutate
+        port: 443
+      # 占位值；部署脚本会自动替换成实际证书的 base64 内容
+      caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJ6ekNDQVhhZ0F3SUJBZ0lVYnNvUndFLzduZDZZYjhNMkRqSDBqL0toVWVjd0NnWUlLb1pJemowRUF3SXcKSURFZU1Cd0dBMVVFQXd3VmJXVnphQzFqZEhKc0xtUmxabUYxYkhRdWMzWmpNQjRYRFRJMk1ETXlPVEUyTURregpNbG9YRFRJM01ETXlPVEUyTURrek1sb3dJREVlTUJ3R0ExVUVBd3dWYldWemFDMWpkSEpzTG1SbFptRjFiSFF1CmMzWmpNRmt3RXdZSEtvWkl6ajBDQVFZSUtvWkl6ajBEQVFjRFFnQUVyeGpBR2Z5VDUwZTNWV01BL3kzbmNpYmMKTXFXeGNjdXRjdEVKdFFhUHpYckxsVWFVeEdGT3FiRERhL3BtTEM5MjZ6elJZQzV2bTRkQ2F6T3AxZCtmMWFPQgpqVENCaWpCcEJnTlZIUkVFWWpCZ2dpTnRaWE5vTFdOMGNtd3VaR1ZtWVhWc2RDNXpkbU11WTJ4MWMzUmxjaTVzCmIyTmhiSUlWYldWemFDMWpkSEpzTG1SbFptRjFiSFF1YzNaamdoRnRaWE5vTFdOMGNtd3VaR1ZtWVhWc2RJSUoKYkc5allXeG9iM04waHdSL0FBQUJNQjBHQTFVZERnUVdCQlRva2g0MmpHbEt0aG4yLzZWWlRqQ2h4SzVhcmpBSwpCZ2dxaGtqT1BRUURBZ05IQURCRUFpQUlPeTJPYVdZeVhFOEdDbzFxRXpseERaanFMd3dDU0VGS3JmbFQwcHdVClpBSWdNTkl3ZGZsVzJ3L2oycE5Ybi9DWWVtZUR5dWd2VjlyQU5pN0VGcXFmeXFzPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+    matchConditions:
+      - name: "match-pods"
+        # 带有label masha-webhook=enabled 的 Pod 会被 webhook 处理。
+        expression: "object.metadata.labels['masha-webhook'] == 'enabled'"
+    rules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mesh-ctrl
+spec:
+  selector:
+    matchLabels:
+      app: mesh-ctrl
+  template:
+    metadata:
+      labels:
+        app: mesh-ctrl
+    spec:
+      serviceAccountName: mesh-ctrl
+      containers:
+      - name: mesh-ctrl
+        image: hjmasha/mesh-ctrl:v0.1.59
+        imagePullPolicy: Always
+        command: ["/app/mesh-ctrl"]
+        args:
+          - "--address"
+          - ":8443"
+          - "--crt"
+          - "/etc/webhook/certs/tls.crt"
+          - "--key"
+          - "/etc/webhook/certs/tls.key"
+          - "--map-initial-size"
+          - "100"
+          - "--port"
+          - "50051"
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+        ports:
+        - containerPort: 50051
+          name: mesh-ctrl-port
+        - containerPort: 8443
+          name: webhook-port
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+            - name: tls-certs
+              mountPath: /etc/webhook/certs
+              readOnly: true
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: webhook
