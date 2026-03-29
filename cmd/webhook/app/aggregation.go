@@ -4,14 +4,14 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"k8s.io/klog/v2"
+	admissionv1 "k8s.io/api/admission/v1"
 )
 
 type admissionReview struct {
-	APIVersion string             `json:"apiVersion"`
-	Kind       string             `json:"kind"`
-	Request    *admissionRequest  `json:"request,omitempty"`
-	Response   *admissionResponse `json:"response,omitempty"`
+	APIVersion string                         `json:"apiVersion"`
+	Kind       string                         `json:"kind"`
+	Request    *admissionRequest              `json:"request,omitempty"`
+	Response   *admissionv1.AdmissionResponse `json:"response,omitempty"`
 }
 
 type admissionRequest struct {
@@ -33,11 +33,6 @@ type admissionRequestUser struct {
 	Username string `json:"username"`
 }
 
-type admissionResponse struct {
-	UID     string `json:"uid"`
-	Allowed bool   `json:"allowed"`
-}
-
 func Aggregation(engine *gin.Engine) {
 	engine.POST("/mutate", func(c *gin.Context) {
 		var review admissionReview
@@ -51,29 +46,18 @@ func Aggregation(engine *gin.Engine) {
 			return
 		}
 
-		request := review.Request
-		klog.Infof(
-			"admission request uid=%s operation=%s kind=%s namespace=%s name=%s user=%s",
-			request.UID,
-			request.Operation,
-			request.Kind.Kind,
-			request.Namespace,
-			request.Name,
-			request.UserInfo.Username,
-		)
-
-		apiVersion := review.APIVersion
-		if apiVersion == "" {
-			apiVersion = "admission.k8s.io/v1"
+		if review.APIVersion == "" {
+			review.APIVersion = "admission.k8s.io/v1"
 		}
 
-		c.JSON(http.StatusOK, admissionReview{
-			APIVersion: apiVersion,
-			Kind:       "AdmissionReview",
-			Response: &admissionResponse{
-				UID:     request.UID,
-				Allowed: true,
-			},
-		})
+		// TODO: tag and command should be configurable
+		response, err := getAdmissionResponse(review.Request.UID, "v0.1.53", "/app/mesh-cli", true)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		review.Response = response
+		c.JSON(http.StatusOK, review)
 	})
 }

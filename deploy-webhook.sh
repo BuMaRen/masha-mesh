@@ -13,12 +13,12 @@ BUILD_DIR="${SCRIPT_DIR}/build"
 WEBHOOK_FILE="${BUILD_DIR}/webhook/webhook.yml"
 DRY_RUN=false
 
-CERT_DIR="${BUILD_DIR}/certs/test"
+CERT_DIR="${BUILD_DIR}/certs"
 CERT_FILE="${CERT_DIR}/tls.crt"
 KEY_FILE="${CERT_DIR}/tls.key"
 WEBHOOK_NAMESPACE="default"
-WEBHOOK_SERVICE_NAME="test-svc"
-WEBHOOK_SECRET="test-svc-tls"
+WEBHOOK_SERVICE_NAME="webhook"
+WEBHOOK_SECRET="webhook"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
