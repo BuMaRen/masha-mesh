@@ -32,6 +32,8 @@ to quickly create a Cobra application.`,
 	rootCmd.Flags().StringVarP(&opts.Key, "key", "", "", "https server key file")
 	rootCmd.Flags().StringVarP(&opts.Address, "address", "a", "0.0.0.0:8443", "https server address")
 	rootCmd.Flags().IntVarP(&opts.MapInitialSize, "map-initial-size", "", 1024, "initial size of the map")
+	rootCmd.Flags().StringVarP(&opts.InjectionImageTag, "injection-image-tag", "", "hjmasha/mesh-cli:v0.1.53", "sidecar injection image tag")
+	rootCmd.Flags().StringVarP(&opts.InjectionCommand, "injection-command", "", "/app/mesh-cli", "sidecar injection command")
 	rootCmd.MarkFlagRequired("crt")
 	rootCmd.MarkFlagRequired("key")
 	return rootCmd

@@ -104,6 +104,10 @@ spec:
           - "100"
           - "--port"
           - "50051"
+          - "--injection-image-tag"
+          - "hjmasha/mesh-cli:v0.1.53"
+          - "--injection-command"
+          - "/app/mesh-cli"
         resources:
           limits:
             memory: "128Mi"

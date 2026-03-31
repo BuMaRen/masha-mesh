@@ -61,14 +61,14 @@ func TestEndpointSlice_OnAdded(t *testing.T) {
 			expectedExists: true,
 		},
 		{
-			name:        "add duplicate endpointslice with incorrect version",
+			name:        "add duplicate endpointslice with newer jumped version",
 			serviceName: "test-service",
 			initialES: map[string]*discoveryv1.EndpointSlice{
 				"es-1": createTestEndpointSlice("es-1", "test-service", "1"),
 			},
 			inputES:        createTestEndpointSlice("es-1", "test-service", "5"),
 			expectedCount:  1,
-			expectedExists: true, // old version should remain
+			expectedExists: true,
 		},
 		{
 			name:           "add to empty service name",
@@ -101,10 +101,10 @@ func TestEndpointSlice_OnAdded(t *testing.T) {
 			// Verify version when it should exist
 			if tt.expectedExists && tt.expectedCount > 0 {
 				actualES := e.esNameToEs[tt.inputES.Name]
-				// For incorrect version increment, old version should remain
-				if tt.name == "add duplicate endpointslice with incorrect version" {
-					if actualES.ResourceVersion != "1" {
-						t.Errorf("expected version to remain '1', got '%s'", actualES.ResourceVersion)
+				// Newer version should replace old one even if version jumps.
+				if tt.name == "add duplicate endpointslice with newer jumped version" {
+					if actualES.ResourceVersion != "5" {
+						t.Errorf("expected version to be updated to '5', got '%s'", actualES.ResourceVersion)
 					}
 				}
 			}
@@ -148,7 +148,7 @@ func TestEndpointSlice_OnUpdate(t *testing.T) {
 			shouldExistNewKey: false,
 		},
 		{
-			name:        "update with incorrect version increment",
+			name:        "update with newer jumped version",
 			serviceName: "test-service",
 			initialES: map[string]*discoveryv1.EndpointSlice{
 				"es-1": createTestEndpointSlice("es-1", "test-service", "1"),
@@ -156,7 +156,7 @@ func TestEndpointSlice_OnUpdate(t *testing.T) {
 			oldES:             createTestEndpointSlice("es-1", "test-service", "1"),
 			newES:             createTestEndpointSlice("es-1", "test-service", "5"),
 			expectedCount:     1,
-			expectedVersion:   "1", // should remain unchanged
+			expectedVersion:   "5",
 			shouldExistOldKey: true,
 			shouldExistNewKey: true,
 		},
@@ -309,7 +309,7 @@ func TestVersionMatched(t *testing.T) {
 			name:       "version jump",
 			oldVersion: "1",
 			newVersion: "5",
-			expected:   false,
+			expected:   true,
 		},
 		{
 			name:       "version decrease",

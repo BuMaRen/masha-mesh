@@ -6,7 +6,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// VersionIncrement checks if the incomingVersion is exactly one increment higher than the currentVersion.
+// VersionIncrement checks if the incomingVersion is newer than the currentVersion.
+// Kubernetes resourceVersion is monotonic but not guaranteed to increase by exactly 1.
 func VersionIncrement(currentVersion, incomingVersion string) bool {
 	// 当前假设版本格式均为数字，单调递增
 	curVer, err1 := strconv.Atoi(currentVersion)
@@ -16,5 +17,5 @@ func VersionIncrement(currentVersion, incomingVersion string) bool {
 		return false
 	}
 	klog.Infof("Comparing versions: current=%d, incoming=%d", curVer, incVer)
-	return incVer-curVer == 1
+	return incVer > curVer
 }

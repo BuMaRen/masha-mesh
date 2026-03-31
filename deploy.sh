@@ -11,6 +11,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
 DRY_RUN=false
+NO_PUSH=false
 
 CERT_DIR="${BUILD_DIR}/certs"
 CERT_FILE="${CERT_DIR}/tls.crt"
@@ -113,14 +114,15 @@ update_deployment_file() {
 
     log_info "更新 $file 中的镜像版本 -> $new_version"
 
-    # 直接按镜像名替换tag，不依赖旧版本号，避免ctrl/cli版本不一致时替换失败
+    # 直接按镜像名替换tag中的版本号（vX.Y.Z），避免ctrl/cli版本不一致时替换失败
+    # 该规则同样会更新 --injection-image-tag 中的 hjmasha/mesh-cli:vX.Y.Z
     # 兼容macOS和Linux的sed -i语法
     if [[ "$OSTYPE" == "darwin"* ]] || sed --version 2>&1 | grep -q "BSD"; then
         # macOS/BSD sed需要提供备份扩展名参数，使用空字符串表示不备份
-        sed -E -i '' "s#(hjmasha/mesh-(ctrl|cli)):[^[:space:]]+#\\1:${new_version}#g" "$file"
+        sed -E -i '' "s#(hjmasha/mesh-(ctrl|cli)):v?[0-9]+(\.[0-9]+){2}#\\1:${new_version}#g" "$file"
     else
         # GNU sed
-        sed -E -i "s#(hjmasha/mesh-(ctrl|cli)):[^[:space:]]+#\\1:${new_version}#g" "$file"
+        sed -E -i "s#(hjmasha/mesh-(ctrl|cli)):v?[0-9]+(\.[0-9]+){2}#\\1:${new_version}#g" "$file"
     fi
 }
 
@@ -161,24 +163,58 @@ main() {
     log_info "新版本号: ${new_version}"
     
     if [ "$DRY_RUN" = true ]; then
-        log_info "DRY RUN: 将执行以下步骤"
+        log_info "DRY RUN: 将会运行以下命令（按顺序）"
         echo ""
-        echo "步骤1: 在根目录执行 make push VERSION=${new_version}"
-        echo "步骤2: 更新以下文件中的版本号："
-        echo "  - ${ctrl_file}"
-        echo "  - ${cli_file}"
-        echo "步骤3: 生成 webhook TLS 证书并创建/更新 Secret ${WEBHOOK_NAMESPACE}/${WEBHOOK_SECRET}"
-        echo "步骤4: 更新 ${ctrl_file} 中的 caBundle"
-        echo "步骤5: 在 build 目录执行 make all"
+        echo "# 步骤1: 编译镜像（默认推送，可通过 --no-push 关闭）"
+        echo "cd ${SCRIPT_DIR}"
+        if [ "$NO_PUSH" = true ]; then
+            echo "make build VERSION=${new_version}"
+        else
+            echo "make push VERSION=${new_version}"
+        fi
+        echo ""
+
+        echo "# 步骤2: 更新 deployment 文件中的镜像版本"
+        echo "# Linux(GNU sed):"
+        echo "sed -E -i \"s#(hjmasha/mesh-(ctrl|cli)):v?[0-9]+(\\.[0-9]+){2}#\\1:${new_version}#g\" ${ctrl_file}"
+        echo "sed -E -i \"s#(hjmasha/mesh-(ctrl|cli)):v?[0-9]+(\\.[0-9]+){2}#\\1:${new_version}#g\" ${cli_file}"
+        echo "# macOS/BSD sed 时会使用: sed -E -i '' ..."
+        echo ""
+
+        echo "# 步骤3: 生成证书并更新 Secret"
+        echo "mkdir -p ${CERT_DIR}"
+        echo "cd ${SCRIPT_DIR}"
+        echo "./build/certs/self-signed.sh"
+        if [ "$WEBHOOK_NAMESPACE" != "default" ]; then
+            echo "kubectl create namespace ${WEBHOOK_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -"
+        fi
+        echo "kubectl -n ${WEBHOOK_NAMESPACE} create secret tls ${WEBHOOK_SECRET} --cert=${CERT_FILE} --key=${KEY_FILE} --dry-run=client -o yaml | kubectl apply -f -"
+        echo ""
+
+        echo "# 步骤4: 更新 webhook caBundle"
+        echo "ca_bundle=\$(base64 < ${CERT_FILE} | tr -d '\\n')"
+        echo "# Linux(GNU sed):"
+        echo "sed -E -i \"s#(^[[:space:]]*caBundle:).*#\\1 \${ca_bundle}#g\" ${ctrl_file}"
+        echo "# macOS/BSD sed 时会使用: sed -E -i '' ..."
+        echo ""
+
+        echo "# 步骤5: 部署到本地 Kubernetes 集群"
+        echo "cd ${BUILD_DIR}"
+        echo "make all"
         echo ""
         log_info "DRY RUN 完成。使用不带 --dry-run 参数执行实际部署"
         return 0
     fi
     
-    # 步骤1: 在根目录执行 make push
-    log_info "步骤1: 编译并推送镜像到DockerHub (VERSION=${new_version})"
+    # 步骤1: 在根目录编译镜像（默认推送，可通过参数关闭）
     cd "$SCRIPT_DIR"
-    make push VERSION="${new_version}"
+    if [ "$NO_PUSH" = true ]; then
+        log_info "步骤1: 编译镜像但不推送到远端 (VERSION=${new_version})"
+        make build VERSION="${new_version}"
+    else
+        log_info "步骤1: 编译并推送镜像到DockerHub (VERSION=${new_version})"
+        make push VERSION="${new_version}"
+    fi
     
     # 步骤2: 更新deployment.yml文件
     log_info "步骤2: 更新deployment.yml文件中的版本号"
@@ -216,6 +252,7 @@ show_help() {
 
 选项:
     --dry-run       显示将要执行的步骤，但不实际执行
+    --no-push       仅编译镜像，不推送到远端仓库（默认会推送）
     -h, --help      显示此帮助信息
 
 参数:
@@ -228,9 +265,10 @@ show_help() {
     $0 0.1.31               # 使用指定版本号 v0.1.31 部署
     $0 --dry-run            # 查看将要执行的步骤（自动递增版本）
     $0 --dry-run v0.1.30    # 查看将要执行的步骤（使用 v0.1.30）
+    $0 --no-push            # 编译镜像但不推送，随后继续部署
 
 功能:
-    1. 在根目录执行 make push VERSION=vX.X.XX
+    1. 在根目录执行 make push VERSION=vX.X.XX（或使用 --no-push 时执行 make build）
     2. 更新 build/ctrl/mesh-ctrl-pod.yaml 和 build/cli/deployment.yml 中的镜像版本
     3. 自动生成 TLS 证书并创建/更新 default/webhook Secret
     4. 自动更新 build/ctrl/mesh-ctrl-pod.yaml 的 caBundle
@@ -248,6 +286,10 @@ parse_args() {
                 ;;
             --dry-run)
                 DRY_RUN=true
+                shift
+                ;;
+            --no-push)
+                NO_PUSH=true
                 shift
                 ;;
             *)

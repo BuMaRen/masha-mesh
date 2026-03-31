@@ -1,87 +1,98 @@
+# Client 侧测试 Deployment
+# 目标链路：podA(test-client) -> podA sidecar -> podB sidecar -> podB app
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: test-svc
+  # Deployment 名称
+  name: test-client
+  # 放在 default 命名空间，和 mesh-ctrl/webhook 保持一致
+  namespace: default
 spec:
+  # 单副本，便于排查日志与流量
+  replicas: 1
   selector:
     matchLabels:
-      app: test-svc
+      # Deployment 通过该标签选择 Pod
+      app: test-client
   template:
     metadata:
       labels:
-        app: test-svc
+        # 业务标签
+        app: test-client
+        # webhook 注入开关：必须为 enabled 才会注入 mesh-cli sidecar
+        masha-webhook: enabled
     spec:
+      # initContainer 在业务容器和 sidecar 启动前执行一次，用于写入 iptables
       initContainers:
       - name: init-iptables
+        # 包含 iptables 工具的镜像
         image: wbitt/network-multitool:minimal
         securityContext:
           capabilities:
+            # 修改网络规则需要 NET_ADMIN
             add: ["NET_ADMIN"]
         command:
+        # 用 shell 执行多条命令
         - sh
         - -c
         - |
-          # 由 uid 1337 的进程发出的流量不被重定向到 15001 端口
-          iptables -t nat -A OUTPUT \
-            -m owner --uid-owner 1337 \
-            -j RETURN
+          # -e: 任意命令失败则退出；-u: 未定义变量报错
+          set -eu
+          # 放行 sidecar(root, uid=0) 发出的流量，避免 sidecar 自己被再次重定向造成环路
+          iptables -t nat -A OUTPUT -m owner --uid-owner 0 -j RETURN
+          # 放行本地回环流量
+          iptables -t nat -A OUTPUT -d 127.0.0.1/32 -j RETURN
+          # 放行已经发往 sidecar 入站端口的流量，避免二次重定向
+          iptables -t nat -A OUTPUT -p tcp --dport 15001 -j RETURN
+          # 其余出站 TCP 统一重定向到 sidecar L4 端口 15001
+          iptables -t nat -A OUTPUT -p tcp -j REDIRECT --to-port 15001
 
-          # 目标为 127.0.0.1 的流量不劫持
-          iptables -t nat -A OUTPUT \
-            -d 127.0.0.1/32 \
-            -j RETURN
-
-          # 劫持发往监听端口的本身的连接不再重定向
-          iptables -t nat -A OUTPUT \
-            -p tcp --dport 15001 \
-            -j RETURN
-
-          # 所有出站的 TCP 流量都重定向到 15001 端口
-          iptables -t nat -A OUTPUT \
-            -p tcp \
-            -j REDIRECT --to-port 15001
-          
-          # 已到达 15001 的入站流量不再重定向，避免环路
-          iptables -t nat -A PREROUTING \
-            -p tcp --dport 15001 \
-            -j RETURN
-
-          # 更新动态配置的端口
-          iptables -t nat -A PREROUTING \
-            -p tcp --dport 9090 \
-            -j RETURN
-
-          # 所有入站 TCP 流量重定向到 15001 端口
-          iptables -t nat -A PREROUTING \
-            -p tcp \
-            -j REDIRECT --to-port 15001
+          # 放行已经到达 15001 的入站流量，避免 PREROUTING 环路
+          iptables -t nat -A PREROUTING -p tcp --dport 15001 -j RETURN
+          # 放行 sidecar 动态配置端口 9090，供本 Pod 内容器调用
+          iptables -t nat -A PREROUTING -p tcp --dport 9090 -j RETURN
+          # 其余入站 TCP 也导入 sidecar，实现入站统一接管
+          iptables -t nat -A PREROUTING -p tcp -j REDIRECT --to-port 15001
       containers:
-      - name: test-svc
-        image: curlimages/curl
-        command: ["top"]
+      # 业务测试容器：负责向 sidecar 下发订阅并持续发请求
+      - name: test-client
+        image: curlimages/curl:8.12.1
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            # 脚本模式：失败即退出，避免无效状态下继续跑
+            set -eu
+            # 等待 sidecar 动态配置接口启动
+            echo "[client] waiting sidecar dynamic config endpoint on 127.0.0.1:9090"
+            # 订阅 test-svr，200=首次成功，400=已订阅（可视作就绪）
+            until curl -sS -o /tmp/subscribe.out -w "%{http_code}" -X POST http://127.0.0.1:9090/service/test-svr | grep -Eq "200|400"; do
+              echo "[client] sidecar not ready, retry in 2s"
+              sleep 2
+            done
+
+            # 打印 sidecar 返回内容（用于调试订阅状态）
+            echo "[client] subscribe response:"
+            cat /tmp/subscribe.out || true
+
+            # 进入持续探测循环
+            echo "[client] start probing server through injected sidecar (l7 on 127.0.0.1:8080)"
+            while true; do
+              # 打时间戳，便于观察周期
+              date
+              # 请求 Service 地址；出站流量会被 OUTPUT 链透明重定向到本 Pod sidecar
+              # sidecar 再按订阅到的 endpoint 列表转发到目标 Pod
+              curl -sS -i --max-time 5 http://test-svr:8081/ping || true
+              # 空行分隔每次探测输出
+              echo ""
+              # 每 5 秒探测一次
+              sleep 5
+            done
         resources:
+          # 给 client 容器设置资源上限
           limits:
             memory: "128Mi"
             cpu: "500m"
+          # 给 client 容器设置资源请求
           requests:
             memory: "64Mi"
             cpu: "250m"
-      - name: proxy
-        image: hjmasha/mesh-cli:v0.1.58
-        command: ["/app/mesh-cli"]
-        securityContext:
-          runAsGroup: 1337
-          runAsUser: 1337
-          runAsNonRoot: true
-        ports:
-        # - containerPort: 15001
-        #   name: l4proxy
-        - containerPort: 9090
-          name: config-port
-        resources:
-          requests:
-            memory: "32Mi"
-            cpu: "100m"
-          limits:
-            memory: "64Mi"
-            cpu: "200m"

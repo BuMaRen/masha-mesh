@@ -13,6 +13,8 @@ type HttpsServer struct {
 	address  string
 	certFile string
 	keyFile  string
+
+	aggregator func(*gin.Engine)
 }
 
 func (s *HttpsServer) Serve(ctx context.Context) error {
@@ -22,7 +24,7 @@ func (s *HttpsServer) Serve(ctx context.Context) error {
 	}
 	defer listener.Close()
 	engine := gin.Default()
-	Aggregation(engine)
+	s.aggregator(engine)
 	httpSvr := &http.Server{
 		Handler: engine.Handler(),
 	}

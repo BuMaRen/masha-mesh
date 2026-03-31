@@ -21,7 +21,7 @@ func containerPatch(imageTag, command string) ([]byte, error) {
 	memReq, _ := resource.ParseQuantity("64Mi")
 	ctn := corev1.Container{
 		Name:    "sidecar",
-		Image:   "hjmasha/mesh-cli:" + imageTag,
+		Image:   imageTag,
 		Command: []string{command},
 		Resources: corev1.ResourceRequirements{
 			Limits:   corev1.ResourceList{"cpu": cpuLimit, "memory": memLimit},
@@ -77,7 +77,7 @@ type admissionRequestUser struct {
 	Username string `json:"username"`
 }
 
-func Aggregation(engine *gin.Engine) {
+func Aggregation(engine *gin.Engine, imageTag, command string) {
 	engine.POST("/mutate", func(c *gin.Context) {
 		var review admissionReview
 		if err := c.ShouldBindJSON(&review); err != nil {
@@ -94,8 +94,7 @@ func Aggregation(engine *gin.Engine) {
 			review.APIVersion = "admission.k8s.io/v1"
 		}
 
-		// TODO: tag and command should be configurable
-		response, err := getAdmissionResponse(review.Request.UID, "v0.1.53", "/app/mesh-cli", true)
+		response, err := getAdmissionResponse(review.Request.UID, imageTag, command, true)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

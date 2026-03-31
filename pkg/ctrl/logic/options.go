@@ -11,6 +11,10 @@ type Options struct {
 	Crt     string
 	Key     string
 	Address string
+
+	// 注入 sidecar 的配置
+	InjectionImageTag string
+	InjectionCommand  string
 }
 
 func WithGrpcPort(port int) OptionSetter {
@@ -29,6 +33,18 @@ func WithHttpsCrtKey(crt, key string) OptionSetter {
 	return func(o *Options) {
 		o.Crt = crt
 		o.Key = key
+	}
+}
+
+func WithInjectionImageTag(tag string) OptionSetter {
+	return func(o *Options) {
+		o.InjectionImageTag = tag
+	}
+}
+
+func WithInjectionCommand(command string) OptionSetter {
+	return func(o *Options) {
+		o.InjectionCommand = command
 	}
 }
 

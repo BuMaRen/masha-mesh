@@ -7,6 +7,7 @@ import (
 
 	"github.com/BuMaRen/mesh/pkg/ctrl"
 	"github.com/BuMaRen/mesh/pkg/ctrl/storage"
+	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -34,6 +35,10 @@ func (l *Logic) Compelete(opts *Options) error {
 		address:  opts.Address,
 		certFile: opts.Crt,
 		keyFile:  opts.Key,
+
+		aggregator: func(e *gin.Engine) {
+			Aggregation(e, opts.InjectionImageTag, opts.InjectionCommand)
+		},
 	}
 
 	l.grpcPort = opts.GrpcPort
