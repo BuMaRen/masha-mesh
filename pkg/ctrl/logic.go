@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
 	"google.golang.org/grpc"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -25,12 +28,41 @@ type Logic struct {
 	compeletedGrpcServer *grpc.Server
 }
 
-// WatchEndpointSliceOrDie 启动 informer 监听 EndpointSlice 的变化，并将变化同步到 storage 中
-func (l *Logic) WatchEndpointSliceOrDie(ctx context.Context) {
-	kubeConfig, err := rest.InClusterConfig()
-	if err != nil {
+// TODO: 待完成
+func (l *Logic) WatchCRD(ctx context.Context) {
+	kubeConfig := utils.InClusterConfigOrDie()
+
+	dynamicClient := dynamic.NewForConfigOrDie(kubeConfig)
+
+	factory := dynamicinformer.NewDynamicSharedInformerFactory(dynamicClient, 0)
+	crdInformer := factory.ForResource(schema.GroupVersionResource{
+		Group:   "masha.io",
+		Version: "v1",
+		// 注意这里的 Resource 是复数形式，代表 CRD 的资源类型
+		Resource: "containers",
+	}).Informer()
+
+	if _, err := crdInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj any) {
+			// obj -> container
+		},
+		UpdateFunc: func(oldObj, newObj any) {
+			// oldObj, newObj -> container
+		},
+		DeleteFunc: func(obj any) {
+			// obj -> container
+		},
+	}); err != nil {
 		panic(err)
 	}
+	factory.Start(ctx.Done())
+	<-ctx.Done()
+}
+
+// WatchEndpointSliceOrDie 启动 informer 监听 EndpointSlice 的变化，并将变化同步到 storage 中
+func (l *Logic) WatchEndpointSliceOrDie(ctx context.Context) {
+	kubeConfig := utils.InClusterConfigOrDie()
+
 	clientSet := kubernetes.NewForConfigOrDie(kubeConfig)
 
 	informerFactory := informers.NewSharedInformerFactory(clientSet, 0)

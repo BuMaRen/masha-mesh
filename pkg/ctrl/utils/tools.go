@@ -3,8 +3,11 @@ package utils
 import (
 	"strconv"
 
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 )
+
+var cfg *rest.Config
 
 // VersionIncrement checks if the incomingVersion is exactly one increment higher than the currentVersion.
 func VersionIncrement(currentVersion, incomingVersion string) bool {
@@ -17,4 +20,15 @@ func VersionIncrement(currentVersion, incomingVersion string) bool {
 	}
 	klog.Infof("Comparing versions: current=%d, incoming=%d", curVer, incVer)
 	return incVer-curVer == 1
+}
+
+func InClusterConfigOrDie() *rest.Config {
+	if cfg == nil {
+		var err error
+		cfg, err = rest.InClusterConfig()
+		if err != nil {
+			panic(err)
+		}
+	}
+	return cfg
 }
