@@ -59,6 +59,12 @@ func (o *Options) Run() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		l.WatchCRD(workingContext)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		if err := l.ServeGrpcOrDie(workingContext); err != nil {
 			klog.Errorf("Failed to serve gRPC: %v", err)
 			cancel()

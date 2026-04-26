@@ -87,7 +87,7 @@ spec:
         - containerPort: 8081
           name: test-svr-port
       - name: proxy
-        image: hjmasha/mesh-cli:v0.1.53
+        image: hjmasha/mesh-cli:v0.1.61
         command: ["/app/mesh-cli"]
         securityContext:
           runAsGroup: 1337
