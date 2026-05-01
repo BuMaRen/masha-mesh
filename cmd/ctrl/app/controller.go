@@ -23,8 +23,9 @@ to quickly create a Cobra application.`,
 			opts.Run()
 		},
 	}
-	rootCmd.Flags().StringVarP(&opts.Namespace, "namespace", "n", "default", "Namespace to use")
-	rootCmd.Flags().IntVarP(&opts.Port, "port", "p", 50051, "Port to listen on")
-	opts.PodName = os.Getenv("POD_NAME")
+	opts.AddFlags(rootCmd)
+	if opts.PodName == "" {
+		opts.PodName = os.Getenv("POD_NAME")
+	}
 	return rootCmd
 }

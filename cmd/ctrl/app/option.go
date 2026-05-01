@@ -4,25 +4,36 @@ import (
 	"context"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
 	"github.com/BuMaRen/mesh/pkg/ctrl"
+	"github.com/spf13/cobra"
 	"k8s.io/klog/v2"
 )
 
 type Options struct {
-	Namespace string
-	Port      int
-	PodName   string
+	Namespace   string
+	PodName     string
+	ctrlOptions *ctrl.Options
 }
 
 func NewOptions() *Options {
 	return &Options{
-		Namespace: "default",
-		Port:      50051,
-		PodName:   "node1",
+		ctrlOptions: ctrl.NewOptions(),
 	}
+}
+
+func (o *Options) AddFlags(command *cobra.Command) {
+	command.Flags().StringVar(&o.Namespace, "namespace", "", "The namespace of the pod")
+	command.Flags().StringVar(&o.PodName, "pod-name", "", "The name of the pod")
+	o.ctrlOptions.AddFlags(command)
+}
+
+func (o *Options) Run() {
+	rootContext := WithSignalCatch(context.Background())
+	workingContext, cancel := context.WithCancel(rootContext)
+	defer cancel()
+	ctrl.StartUp(workingContext, o.ctrlOptions)
 }
 
 func WithSignalCatch(root context.Context) context.Context {
@@ -40,29 +51,4 @@ func WithSignalCatch(root context.Context) context.Context {
 		os.Exit(1)
 	}()
 	return ctx
-}
-
-func (o *Options) Run() {
-	// rootContext := WithSignalCatch(context.Background())
-	rootContext := context.Background()
-	workingContext, cancel := context.WithCancel(rootContext)
-	defer cancel()
-	l := ctrl.NewLogic(o.Port)
-
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		l.WatchEndpointSliceOrDie(workingContext)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := l.ServeGrpcOrDie(workingContext); err != nil {
-			klog.Errorf("Failed to serve gRPC: %v", err)
-			cancel()
-		}
-	}()
-	wg.Wait()
 }

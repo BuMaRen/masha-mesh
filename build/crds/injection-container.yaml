@@ -1,0 +1,15 @@
+apiVersion: masha.io/v1
+kind: Container
+metadata:
+  name: masha-proxy
+spec:
+  name: masha-proxy
+  image: hjmasha/masha-proxy:v0.1.59
+  command: ["/app/masha-proxy"]
+  resources:
+    limits:
+      memory: "128Mi"
+      cpu: "500m"
+    requests:
+      memory: "64Mi"
+      cpu: "250m"
