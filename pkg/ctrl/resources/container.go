@@ -1,4 +1,4 @@
-package ctrl
+package resources
 
 import (
 	corev1 "k8s.io/api/core/v1"
@@ -27,7 +27,7 @@ type ContainerList struct {
 	Items           []Container `json:"items"`
 }
 
-func parseContainer(obj any) *Container {
+func ParseContainer(obj any) *Container {
 	u := toContainerUnstructured(obj)
 	if u == nil {
 		return nil

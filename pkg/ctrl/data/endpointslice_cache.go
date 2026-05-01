@@ -111,7 +111,7 @@ func (c EndpointSliceCache) OnDelete(obj any) (bool, string, bool) {
 	return true, svcName, len(c[svcName].epsNameToEps) == 0
 }
 
-func (c EndpointSliceCache) GetMerged(svcName string) (any, bool) {
+func (c EndpointSliceCache) GetCache(svcName string) (any, bool) {
 	dEs, exist := c[svcName]
 	if !exist {
 		return nil, false
