@@ -54,3 +54,12 @@ func toContainerUnstructured(obj any) *unstructured.Unstructured {
 		return nil
 	}
 }
+
+func (c *Container) ToCoreV1Container() corev1.Container {
+	return corev1.Container{
+		Name:      c.Spec.Name,
+		Image:     c.Spec.Image,
+		Command:   c.Spec.Command,
+		Resources: c.Spec.Resources,
+	}
+}

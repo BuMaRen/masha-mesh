@@ -3,6 +3,8 @@ package utils
 import (
 	"sync"
 
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
@@ -14,4 +16,14 @@ func InClusterConfigOrDie() *rest.Config {
 		panic(err)
 	}
 	return cfg
+}
+
+func NewDynamicClientOrDie() *dynamic.DynamicClient {
+	cfg := InClusterConfigOrDie()
+	return dynamic.NewForConfigOrDie(cfg)
+}
+
+func NewKubernetesClientOrDie() *kubernetes.Clientset {
+	cfg := InClusterConfigOrDie()
+	return kubernetes.NewForConfigOrDie(cfg)
 }

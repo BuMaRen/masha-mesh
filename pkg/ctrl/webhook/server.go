@@ -1,4 +1,4 @@
-package k8scontroller
+package webhook
 
 import (
 	"context"
@@ -9,9 +9,18 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func aggregate(ctx context.Context, engine *gin.Engine) {}
+type WebhookServer struct {
+	engine *gin.Engine
+}
 
-func ControllerRun(ctx context.Context, opts *Options) error {
+func NewWebhookServer() *WebhookServer {
+	engine := gin.Default()
+	return &WebhookServer{
+		engine: engine,
+	}
+}
+
+func (s *WebhookServer) Run(ctx context.Context, opts *Options) error {
 	listener, err := net.Listen("tcp", opts.address)
 	if err != nil {
 		return err
@@ -31,4 +40,8 @@ func ControllerRun(ctx context.Context, opts *Options) error {
 	}()
 
 	return httpSvr.ServeTLS(listener, opts.certFile, opts.keyFile)
+}
+
+func (s *WebhookServer) Start(address string) error {
+	return s.engine.Run(address)
 }

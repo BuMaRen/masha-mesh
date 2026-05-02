@@ -31,7 +31,7 @@ func (c ContainersCache) OnUpdate(oldObj, newObj any) (bool, string) {
 func (c ContainersCache) OnDelete(obj any) (bool, string, bool) {
 	container := resources.ParseContainer(obj)
 	if container == nil {
-		return false, "", false
+		return false, "", true
 	}
 	delete(c, container.Name)
 	return true, container.Name, true
