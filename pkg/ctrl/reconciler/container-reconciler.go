@@ -2,7 +2,6 @@ package reconciler
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/BuMaRen/mesh/pkg/ctrl/data"
 	"github.com/BuMaRen/mesh/pkg/ctrl/resources"
@@ -27,18 +26,6 @@ func NewCustomResourcesReconciler(cache data.Cache, kubeClient kubernetes.Interf
 		cache:      cache,
 		kubeClient: kubeClient,
 	}
-}
-
-func getContainer(containerCache data.Cache, containerName string) (*resources.Container, error) {
-	obj, existed := containerCache.GetCache(containerName)
-	if !existed {
-		return nil, fmt.Errorf("container %s not found in cache", containerName)
-	}
-	ctn := resources.ParseContainer(obj)
-	if ctn == nil {
-		return nil, fmt.Errorf("failed to parse container %s from cache", containerName)
-	}
-	return ctn, nil
 }
 
 func (r *CustomResourcesReconciler) OnAddedWithContext(ctx context.Context, matchLabels map[string]string) func(obj any) {

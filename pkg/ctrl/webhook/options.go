@@ -8,6 +8,9 @@ type Options struct {
 	certFile string
 	keyFile  string
 	address  string
+	// TODO: imageTag 和 commands 从 crd 中获取
+	imageTag string
+	commands []string
 }
 
 func (o *Options) AddFlags(cmd *cobra.Command) {

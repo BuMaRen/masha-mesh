@@ -6,8 +6,10 @@ import (
 
 	"github.com/BuMaRen/mesh/pkg/ctrl/data"
 	"github.com/BuMaRen/mesh/pkg/ctrl/grpcserver"
+	"github.com/BuMaRen/mesh/pkg/ctrl/metrics"
 	rc "github.com/BuMaRen/mesh/pkg/ctrl/reconciler"
 	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
+	"github.com/BuMaRen/mesh/pkg/ctrl/webhook"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -23,11 +25,22 @@ func StartUp(ctx context.Context, opts *Options) {
 	k8sClient := utils.NewKubernetesClientOrDie()
 	dynamicClient := utils.NewDynamicClientOrDie()
 
+	webhook.NewWebhookServer(containerCache)
 	endpointsliceReconciler := rc.NewEndpointSliceReconciler(epsCache, distributer)
 	customResourcesReconciler := rc.NewCustomResourcesReconciler(containerCache, k8sClient)
 
-	// 监听 endpointSlice，用于路由
 	wg := sync.WaitGroup{}
+	// 启动 metrics 服务器
+	metrics.MustRegister()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := metrics.RunMetricsServer(ctx, opts.MetricsOptions()); err != nil {
+			klog.Errorf("Failed to start metrics server: %v", err)
+		}
+	}()
+
+	// 监听 endpointSlice，用于路由。依赖 grpc，grpc 启动前 sidecars 为空， publish 无法起到实际作用。
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -38,7 +51,7 @@ func StartUp(ctx context.Context, opts *Options) {
 		})
 	}()
 
-	// 监听用户自定义资源，用于注入
+	// 监听自定义的资源，只依赖 kubernetes 原生的资源。
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -60,7 +73,7 @@ func StartUp(ctx context.Context, opts *Options) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := grpcSvr.ListenAndServe(ctx, opts.GrpcOptions()); err != nil {
+		if err := grpcSvr.ListenAndServe(ctx, opts.CtrlOptions()); err != nil {
 			klog.Errorf("Failed to start gRPC server: %v", err)
 		}
 	}()

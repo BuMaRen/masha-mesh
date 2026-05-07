@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"net"
 	"sync"
 
 	"k8s.io/client-go/dynamic"
@@ -26,4 +27,12 @@ func NewDynamicClientOrDie() *dynamic.DynamicClient {
 func NewKubernetesClientOrDie() *kubernetes.Clientset {
 	cfg := InClusterConfigOrDie()
 	return kubernetes.NewForConfigOrDie(cfg)
+}
+
+func NewListenerOrDie(network, address string) net.Listener {
+	lis, err := net.Listen(network, address)
+	if err != nil {
+		panic(err)
+	}
+	return lis
 }
