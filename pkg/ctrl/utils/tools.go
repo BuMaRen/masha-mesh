@@ -1,8 +1,11 @@
 package utils
 
 import (
+	"net"
 	"sync"
 
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
@@ -14,4 +17,22 @@ func InClusterConfigOrDie() *rest.Config {
 		panic(err)
 	}
 	return cfg
+}
+
+func NewDynamicClientOrDie() *dynamic.DynamicClient {
+	cfg := InClusterConfigOrDie()
+	return dynamic.NewForConfigOrDie(cfg)
+}
+
+func NewKubernetesClientOrDie() *kubernetes.Clientset {
+	cfg := InClusterConfigOrDie()
+	return kubernetes.NewForConfigOrDie(cfg)
+}
+
+func NewListenerOrDie(network, address string) net.Listener {
+	lis, err := net.Listen(network, address)
+	if err != nil {
+		panic(err)
+	}
+	return lis
 }

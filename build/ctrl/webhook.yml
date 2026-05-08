@@ -1,0 +1,21 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: webhook-config
+webhooks:
+  - name: webhook.example.com
+    clientConfig:
+      service:
+        name: webhook-service
+        namespace: default
+        path: "/mutate"
+      caBundle: LS0tLS1CRUdJTi... # base64 encoded CA certificate
+    rules:
+      - operations: ["CREATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: Ignore
+    timeoutSeconds: 10
