@@ -25,11 +25,12 @@ func StartUp(ctx context.Context, opts *Options) {
 	k8sClient := utils.NewKubernetesClientOrDie()
 	dynamicClient := utils.NewDynamicClientOrDie()
 
-	webhook.NewWebhookServer(containerCache)
+	webhookServer := webhook.NewWebhookServer(containerCache)
 	endpointsliceReconciler := rc.NewEndpointSliceReconciler(epsCache, distributer)
 	customResourcesReconciler := rc.NewCustomResourcesReconciler(containerCache, k8sClient)
 
 	wg := sync.WaitGroup{}
+
 	// 启动 metrics 服务器
 	metrics.MustRegister()
 	wg.Add(1)
@@ -37,6 +38,15 @@ func StartUp(ctx context.Context, opts *Options) {
 		defer wg.Done()
 		if err := metrics.RunMetricsServer(ctx, opts.MetricsOptions()); err != nil {
 			klog.Errorf("Failed to start metrics server: %v", err)
+		}
+	}()
+
+	// 启动 webhook 服务器，监听自定义资源 container 的变化
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := webhookServer.Run(ctx, opts.WebhookOptions()); err != nil {
+			klog.Errorf("Failed to start webhook server: %v", err)
 		}
 	}()
 

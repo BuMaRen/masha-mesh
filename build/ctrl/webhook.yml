@@ -6,7 +6,7 @@ webhooks:
   - name: webhook.example.com
     clientConfig:
       service:
-        name: webhook-service
+        name: mesh-ctrl
         namespace: default
         path: "/mutate"
       caBundle: LS0tLS1CRUdJTi... # base64 encoded CA certificate

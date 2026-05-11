@@ -3,6 +3,7 @@ package webhook
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/BuMaRen/mesh/pkg/ctrl/data"
 	"github.com/BuMaRen/mesh/pkg/ctrl/resources"
@@ -12,14 +13,11 @@ import (
 )
 
 type WebhookServer struct {
-	engine         *gin.Engine
 	containerCache data.Cache
 }
 
 func NewWebhookServer(containerCache data.Cache) *WebhookServer {
-	engine := gin.Default()
 	return &WebhookServer{
-		engine:         engine,
 		containerCache: containerCache,
 	}
 }
@@ -44,13 +42,11 @@ func (s *WebhookServer) Run(ctx context.Context, opts *Options) error {
 
 	go func() {
 		<-ctx.Done()
-		err := httpSvr.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err := httpSvr.Shutdown(ctx)
 		klog.Infof("Shutting down HTTPS server, error: %v", err)
 	}()
 
 	return httpSvr.ServeTLS(listener, opts.certFile, opts.keyFile)
-}
-
-func (s *WebhookServer) Start(address string) error {
-	return s.engine.Run(address)
 }

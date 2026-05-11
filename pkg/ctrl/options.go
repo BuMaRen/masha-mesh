@@ -3,6 +3,7 @@ package ctrl
 import (
 	"github.com/BuMaRen/mesh/pkg/ctrl/grpcserver"
 	"github.com/BuMaRen/mesh/pkg/ctrl/metrics"
+	"github.com/BuMaRen/mesh/pkg/ctrl/webhook"
 	"github.com/spf13/cobra"
 )
 
@@ -12,12 +13,14 @@ type Options struct {
 	gvrResource    string
 	grpcOptions    *grpcserver.Options
 	metricsOptions *metrics.Options
+	webhookOptions *webhook.Options
 }
 
 func NewOptions() *Options {
 	return &Options{
 		grpcOptions:    grpcserver.NewOptions(),
 		metricsOptions: metrics.NewMetricsOptions(),
+		webhookOptions: webhook.NewOptions(),
 	}
 }
 
@@ -27,6 +30,11 @@ func (o *Options) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.gvrResource, "gvr-resource", "injections", "Resource of the GVR to watch")
 	o.grpcOptions.AddFlags(cmd)
 	o.metricsOptions.AddFlags(cmd)
+	o.webhookOptions.AddFlags(cmd)
+}
+
+func (o *Options) WebhookOptions() *webhook.Options {
+	return o.webhookOptions
 }
 
 func (o *Options) CtrlOptions() *grpcserver.Options {

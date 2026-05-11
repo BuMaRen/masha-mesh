@@ -57,9 +57,32 @@ spec:
             cpu: "250m"
         ports:
         - containerPort: 50051
-          name: mesh-ctrl-port
+          name: ctrl-grpc-port
+        - containerPort: 443
+          name: ctrl-webhook-port
         env:
         - name: POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        securityContext:
+          capabilities:
+            add: ["NET_BIND_SERVICE"]
+        volumeMounts:
+        - name: webhook-certs
+          mountPath: /etc/webhook/certs/tls.crt
+          subPath: tls.crt
+          readOnly: true
+        - name: webhook-keys
+          mountPath: /etc/webhook/certs/tls.key
+          subPath: tls.key
+          readOnly: true
+    volumes:
+      - name: webhook-certs
+        secret:
+          secretName: mesh-webhook-certs
+          defaultMode: 0400
+      - name: webhook-keys
+        secret:
+          secretName: mesh-webhook-keys
+          defaultMode: 0400
