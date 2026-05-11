@@ -5,6 +5,7 @@ import (
 
 	"github.com/BuMaRen/mesh/pkg/ctrl/data"
 	"github.com/BuMaRen/mesh/pkg/ctrl/resources"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -28,6 +29,24 @@ func NewCustomResourcesReconciler(cache data.Cache, kubeClient kubernetes.Interf
 	}
 }
 
+func (r *CustomResourcesReconciler) listDeployments(ctx context.Context, nameSpace string, matchLabels map[string]string) (*appsv1.DeploymentList, error) {
+	listOpts := metav1.ListOptions{
+		LabelSelector: metav1.FormatLabelSelector(&metav1.LabelSelector{
+			MatchLabels: matchLabels,
+		}),
+	}
+	return r.kubeClient.AppsV1().Deployments(nameSpace).List(ctx, listOpts)
+}
+
+func (r *CustomResourcesReconciler) listStatefulSets(ctx context.Context, nameSpace string, matchLabels map[string]string) (*appsv1.StatefulSetList, error) {
+	listOpts := metav1.ListOptions{
+		LabelSelector: metav1.FormatLabelSelector(&metav1.LabelSelector{
+			MatchLabels: matchLabels,
+		}),
+	}
+	return r.kubeClient.AppsV1().StatefulSets(nameSpace).List(ctx, listOpts)
+}
+
 func (r *CustomResourcesReconciler) OnAddedWithContext(ctx context.Context, matchLabels map[string]string) func(obj any) {
 	return func(obj any) {
 		changed, containerName := r.cache.OnAdded(obj)
@@ -42,14 +61,9 @@ func (r *CustomResourcesReconciler) OnAddedWithContext(ctx context.Context, matc
 		} else {
 			nameSpace = ctn.Namespace
 		}
-		listOpts := metav1.ListOptions{
-			LabelSelector: metav1.FormatLabelSelector(&metav1.LabelSelector{
-				MatchLabels: matchLabels,
-			}),
-		}
 
 		// workload 存在的时候没有 crd， 所以这里直接查 Deployment/StatefulSet，找到后补上 container
-		if deployments, err := r.kubeClient.AppsV1().Deployments(nameSpace).List(ctx, listOpts); err == nil {
+		if deployments, err := r.listDeployments(ctx, nameSpace, matchLabels); err == nil {
 			// 这里 deployment 都需要补充 container，如果 container 不存在就补上
 			for _, dep := range deployments.Items {
 				containers := dep.Spec.Template.Spec.Containers
@@ -75,7 +89,7 @@ func (r *CustomResourcesReconciler) OnAddedWithContext(ctx context.Context, matc
 		}
 
 		// 更新 StatefulSet：仅移除目标 container，不删除整个 workload
-		if statefulSets, err := r.kubeClient.AppsV1().StatefulSets(nameSpace).List(ctx, listOpts); err == nil {
+		if statefulSets, err := r.listStatefulSets(ctx, nameSpace, matchLabels); err == nil {
 			for _, sts := range statefulSets.Items {
 				containers := sts.Spec.Template.Spec.Containers
 				skiped := false
@@ -140,7 +154,7 @@ func (r *CustomResourcesReconciler) OnUpdatedWithContext(ctx context.Context, ma
 		}
 
 		// ===== 更新 StatefulSet =====
-		if statefulSets, err := r.kubeClient.AppsV1().StatefulSets(nameSpace).List(ctx, listOpts); err == nil {
+		if statefulSets, err := r.listStatefulSets(ctx, nameSpace, matchLabels); err == nil {
 			for _, sts := range statefulSets.Items {
 				for i, container := range sts.Spec.Template.Spec.Containers {
 					if container.Name != containerName {
@@ -210,7 +224,7 @@ func (r *CustomResourcesReconciler) OnDeletedWithContext(ctx context.Context, ma
 		}
 
 		// 更新 StatefulSet：仅移除目标 container，不删除整个 workload
-		if statefulSets, err := r.kubeClient.AppsV1().StatefulSets(nameSpace).List(ctx, listOpts); err == nil {
+		if statefulSets, err := r.listStatefulSets(ctx, nameSpace, matchLabels); err == nil {
 			for _, sts := range statefulSets.Items {
 				containers := sts.Spec.Template.Spec.Containers
 				newContainers := make([]corev1.Container, 0, len(containers))
@@ -240,7 +254,3 @@ func (r *CustomResourcesReconciler) OnDeletedWithContext(ctx context.Context, ma
 		}
 	}
 }
-
-// func (r *CustomResourcesReconciler) OnDeleted(obj any) {}
-
-// var _ Reconciler = (*CustomResourcesReconciler)(nil)

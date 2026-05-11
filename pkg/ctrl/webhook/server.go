@@ -14,6 +14,7 @@ import (
 
 type WebhookServer struct {
 	containerCache data.Cache
+	injectionLabel string
 }
 
 func NewWebhookServer(containerCache data.Cache) *WebhookServer {
@@ -31,6 +32,8 @@ func (s *WebhookServer) getContainerCache(name string) *resources.Container {
 }
 
 func (s *WebhookServer) Run(ctx context.Context, opts *Options) error {
+	s.injectionLabel = opts.injectionLabel
+
 	listener := utils.NewListenerOrDie("tcp", opts.address)
 	defer listener.Close()
 

@@ -83,10 +83,10 @@ func (s *WebhookServer) Aggregation(engine *gin.Engine, imageTag string, command
 		}
 
 		// 检查 pod 是否有 masha.io/injection 标签
-		injectionContainer, hasInjectionLabel := pod.Labels["masha.io/injection"]
+		injectionContainer, hasInjectionLabel := pod.Labels[s.injectionLabel]
 		if hasInjectionLabel {
 			if container := s.getContainerCache(injectionContainer); container != nil {
-				klog.Infof("Pod %s/%s has masha.io/injection=%s", pod.Namespace, pod.Name, injectionContainer)
+				klog.Infof("Pod %s/%s has %s=%s", pod.Namespace, pod.Name, s.injectionLabel, injectionContainer)
 				pt := admissionv1.PatchTypeJSONPatch
 				patch, err := containerPatch(container.Spec.Name, container.Spec.Image, container.Spec.Command)
 				if err == nil {
