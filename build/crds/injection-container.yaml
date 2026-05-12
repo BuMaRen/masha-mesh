@@ -1,11 +1,10 @@
 apiVersion: masha.io/v1
 kind: Container
 metadata:
-  name: masha-proxy
+  name: nginx
 spec:
-  name: masha-proxy
-  image: hjmasha/masha-proxy:v0.1.59
-  command: ["/app/masha-proxy"]
+  name: test-containers
+  image: nginx:latest
   resources:
     limits:
       memory: "128Mi"

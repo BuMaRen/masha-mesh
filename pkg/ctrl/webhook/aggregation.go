@@ -42,8 +42,7 @@ func containerPatch(containerName, imageTag string, commands []string) ([]byte, 
 	})
 }
 
-// TODO: 参数需要改造，imageTag 和 commands 从 crd 中获取
-func (s *WebhookServer) Aggregation(engine *gin.Engine, imageTag string, commands []string) {
+func (s *WebhookServer) Aggregation(engine *gin.Engine) {
 	// /mutate: 处理 Kubernetes AdmissionReview 请求并返回 sidecar 注入补丁。
 	engine.POST("/mutate", func(c *gin.Context) {
 		admissionReview := admissionv1.AdmissionReview{}

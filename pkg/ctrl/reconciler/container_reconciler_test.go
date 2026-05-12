@@ -10,16 +10,21 @@ import (
 )
 
 func TestOnAdded(t *testing.T) {
+	labelKey := "masha.io/injection"
+	labelValue := "hjmasha-sidecar-v1"
 
-	inputed, expected, rc := testCase1("default", "masha.io/injection", "hjmasha-sidecar-v1")
+	inputed, expected, rc := testCase1("default", labelKey, labelValue)
 
 	fakeClient := fake.NewClientset(&inputed)
 	c := data.NewContainersCache()
 	cr := NewCustomResourcesReconciler(c, fakeClient)
-	cr.OnAddedWithContext(context.Background(), map[string]string{"masha.io/injection": "hjmasha-sidecar-v1"})(rc)
+	cr.OnAddedWithContext(context.Background(), labelKey)(rc)
 	deps, err := fakeClient.AppsV1().Deployments("default").List(context.Background(), metav1.ListOptions{
 		LabelSelector: metav1.FormatLabelSelector(&metav1.LabelSelector{
-			MatchLabels: map[string]string{"masha.io/injection": "hjmasha-sidecar-v1"},
+			MatchExpressions: []metav1.LabelSelectorRequirement{{
+				Key:      labelKey,
+				Operator: metav1.LabelSelectorOpExists,
+			}},
 		}),
 	})
 	if err != nil {

@@ -9,16 +9,12 @@ type Options struct {
 	keyFile        string
 	address        string
 	injectionLabel string
-	// TODO: imageTag 和 commands 从 crd 中获取
-	imageTag string
-	commands []string
 }
 
 func (o *Options) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.certFile, "cert-file", "", "Path to the TLS certificate file")
 	cmd.Flags().StringVar(&o.keyFile, "key-file", "", "Path to the TLS key file")
 	cmd.Flags().StringVar(&o.address, "webhook-address", ":443", "The address the webhook server binds to")
-	cmd.Flags().StringVar(&o.injectionLabel, "injection-label", "masha.io/injection", "Label to identify namespaces for sidecar injection")
 	cmd.MarkFlagRequired("cert-file")
 	cmd.MarkFlagRequired("key-file")
 }

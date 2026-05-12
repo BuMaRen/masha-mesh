@@ -17,10 +17,22 @@ type WebhookServer struct {
 	injectionLabel string
 }
 
-func NewWebhookServer(containerCache data.Cache) *WebhookServer {
-	return &WebhookServer{
+type WebOption func(*WebhookServer)
+
+func WithInjectionLabel(label string) WebOption {
+	return func(s *WebhookServer) {
+		s.injectionLabel = label
+	}
+}
+
+func NewWebhookServer(containerCache data.Cache, opts ...WebOption) *WebhookServer {
+	server := &WebhookServer{
 		containerCache: containerCache,
 	}
+	for _, opt := range opts {
+		opt(server)
+	}
+	return server
 }
 
 func (s *WebhookServer) getContainerCache(name string) *resources.Container {
@@ -38,7 +50,7 @@ func (s *WebhookServer) Run(ctx context.Context, opts *Options) error {
 	defer listener.Close()
 
 	engine := gin.Default()
-	s.Aggregation(engine, opts.imageTag, opts.commands)
+	s.Aggregation(engine)
 	httpSvr := &http.Server{
 		Handler: engine.Handler(),
 	}

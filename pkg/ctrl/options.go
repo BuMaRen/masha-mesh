@@ -8,6 +8,7 @@ import (
 )
 
 type Options struct {
+	label          string
 	gvrVersion     string
 	gvrGroup       string
 	gvrResource    string
@@ -25,9 +26,10 @@ func NewOptions() *Options {
 }
 
 func (o *Options) AddFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&o.label, "label", "masha.io/injection", "Label to select workloads for injection")
 	cmd.Flags().StringVar(&o.gvrVersion, "gvr-version", "v1", "Version of the GVR to watch")
 	cmd.Flags().StringVar(&o.gvrGroup, "gvr-group", "masha.io", "Group of the GVR to watch")
-	cmd.Flags().StringVar(&o.gvrResource, "gvr-resource", "injections", "Resource of the GVR to watch")
+	cmd.Flags().StringVar(&o.gvrResource, "gvr-resource", "containers", "Resource of the GVR to watch")
 	o.grpcOptions.AddFlags(cmd)
 	o.metricsOptions.AddFlags(cmd)
 	o.webhookOptions.AddFlags(cmd)
