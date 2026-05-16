@@ -25,11 +25,12 @@ func StartUp(ctx context.Context, opts *Options) {
 	k8sClient := utils.NewKubernetesClientOrDie()
 	dynamicClient := utils.NewDynamicClientOrDie()
 
-	webhook.NewWebhookServer(containerCache)
+	webhookServer := webhook.NewWebhookServer(containerCache, webhook.WithInjectionLabel(opts.label))
 	endpointsliceReconciler := rc.NewEndpointSliceReconciler(epsCache, distributer)
 	customResourcesReconciler := rc.NewCustomResourcesReconciler(containerCache, k8sClient)
 
 	wg := sync.WaitGroup{}
+
 	// 启动 metrics 服务器
 	metrics.MustRegister()
 	wg.Add(1)
@@ -37,6 +38,15 @@ func StartUp(ctx context.Context, opts *Options) {
 		defer wg.Done()
 		if err := metrics.RunMetricsServer(ctx, opts.MetricsOptions()); err != nil {
 			klog.Errorf("Failed to start metrics server: %v", err)
+		}
+	}()
+
+	// 启动 webhook 服务器，监听自定义资源 container 的变化
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := webhookServer.Run(ctx, opts.WebhookOptions()); err != nil {
+			klog.Errorf("Failed to start webhook server: %v", err)
 		}
 	}()
 
@@ -55,17 +65,14 @@ func StartUp(ctx context.Context, opts *Options) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		matchLabels := map[string]string{
-			"masha.io/injection": "true",
-		}
 		WatchCRD(ctx, dynamicClient, schema.GroupVersionResource{
 			Group:    opts.gvrGroup,
 			Version:  opts.gvrVersion,
 			Resource: opts.gvrResource,
 		}, cache.ResourceEventHandlerFuncs{
-			AddFunc:    customResourcesReconciler.OnAddedWithContext(ctx, matchLabels),
-			UpdateFunc: customResourcesReconciler.OnUpdatedWithContext(ctx, matchLabels),
-			DeleteFunc: customResourcesReconciler.OnDeletedWithContext(ctx, matchLabels),
+			AddFunc:    customResourcesReconciler.OnAddedWithContext(ctx, opts.label),
+			UpdateFunc: customResourcesReconciler.OnUpdatedWithContext(ctx, opts.label),
+			DeleteFunc: customResourcesReconciler.OnDeletedWithContext(ctx, opts.label),
 		})
 	}()
 

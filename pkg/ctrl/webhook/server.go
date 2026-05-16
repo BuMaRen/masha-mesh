@@ -3,6 +3,7 @@ package webhook
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/BuMaRen/mesh/pkg/ctrl/data"
 	"github.com/BuMaRen/mesh/pkg/ctrl/resources"
@@ -12,16 +13,26 @@ import (
 )
 
 type WebhookServer struct {
-	engine         *gin.Engine
 	containerCache data.Cache
+	injectionLabel string
 }
 
-func NewWebhookServer(containerCache data.Cache) *WebhookServer {
-	engine := gin.Default()
-	return &WebhookServer{
-		engine:         engine,
+type WebOption func(*WebhookServer)
+
+func WithInjectionLabel(label string) WebOption {
+	return func(s *WebhookServer) {
+		s.injectionLabel = label
+	}
+}
+
+func NewWebhookServer(containerCache data.Cache, opts ...WebOption) *WebhookServer {
+	server := &WebhookServer{
 		containerCache: containerCache,
 	}
+	for _, opt := range opts {
+		opt(server)
+	}
+	return server
 }
 
 func (s *WebhookServer) getContainerCache(name string) *resources.Container {
@@ -33,24 +44,24 @@ func (s *WebhookServer) getContainerCache(name string) *resources.Container {
 }
 
 func (s *WebhookServer) Run(ctx context.Context, opts *Options) error {
+	s.injectionLabel = opts.injectionLabel
+
 	listener := utils.NewListenerOrDie("tcp", opts.address)
 	defer listener.Close()
 
 	engine := gin.Default()
-	s.Aggregation(engine, opts.imageTag, opts.commands)
+	s.Aggregation(engine)
 	httpSvr := &http.Server{
 		Handler: engine.Handler(),
 	}
 
 	go func() {
 		<-ctx.Done()
-		err := httpSvr.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err := httpSvr.Shutdown(ctx)
 		klog.Infof("Shutting down HTTPS server, error: %v", err)
 	}()
 
 	return httpSvr.ServeTLS(listener, opts.certFile, opts.keyFile)
-}
-
-func (s *WebhookServer) Start(address string) error {
-	return s.engine.Run(address)
 }
