@@ -2,10 +2,10 @@ package grpcserver
 
 import (
 	"context"
-	"net"
 	"sync"
 
 	"github.com/BuMaRen/mesh/pkg/api/mesh"
+	"github.com/BuMaRen/mesh/pkg/ctrl/metrics"
 	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
 	"google.golang.org/grpc"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -54,6 +54,9 @@ func (s *GrpcServer) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStre
 	s.sidecars[sr.SidecarId] = sidecar
 	s.mtx.Unlock()
 
+	metrics.SideCarsConnected.Inc()
+	defer metrics.SideCarsConnected.Dec()
+
 	defer func() {
 		s.mtx.Lock()
 		delete(s.sidecars, sr.SidecarId)
@@ -76,10 +79,7 @@ func (s *GrpcServer) ListenAndServe(ctx context.Context, opts *Options) error {
 	network := opts.network
 	address := opts.address
 
-	listener, err := net.Listen(network, address)
-	if err != nil {
-		panic(err)
-	}
+	listener := utils.NewListenerOrDie(network, address)
 	defer listener.Close()
 
 	grpcServer := grpc.NewServer()
@@ -90,10 +90,7 @@ func (s *GrpcServer) ListenAndServe(ctx context.Context, opts *Options) error {
 		grpcServer.GracefulStop()
 	}()
 
-	if err := grpcServer.Serve(listener); err != nil {
-		klog.Errorf("Failed to serve gRPC server: %v", err)
-	}
-	return err
+	return grpcServer.Serve(listener)
 }
 
 func NewGrpcServer() *GrpcServer {

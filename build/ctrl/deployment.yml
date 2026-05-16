@@ -3,6 +3,9 @@ kind: ClusterRole
 metadata:
   name: mesh-ctrl
 rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["services", "endpointslices"]
     verbs: ["get", "list", "watch"]
@@ -45,9 +48,9 @@ spec:
       serviceAccountName: mesh-ctrl
       containers:
       - name: mesh-ctrl
-        image: hjmasha/mesh-ctrl:v0.1.61
+        image: hjmasha/mesh-ctrl:t0.1.9
         command: ["/app/mesh-ctrl"]
-        args: ["-p", "50051", "-n", "default"]
+        args: ["--cert-file", "/etc/webhook/certs/tls.crt", "--key-file", "/etc/webhook/certs/tls.key", "--grpc-address", ":50051", "--grpc-network", "tcp", "--gvr-group", "masha.io", "--gvr-version", "v1", "--gvr-resource", "containers", "--injection-label", "masha.io/injection", "--metrics-address", ":9090", "--namespace", "default", "--pod-name", "test-pod", "--webhook-address", ":443"]
         resources:
           limits:
             memory: "128Mi"
@@ -57,9 +60,23 @@ spec:
             cpu: "250m"
         ports:
         - containerPort: 50051
-          name: mesh-ctrl-port
+          name: grpc-port
+        - containerPort: 443
+          name: webhook-port
         env:
         - name: POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        securityContext:
+          capabilities:
+            add: ["NET_BIND_SERVICE"]
+        volumeMounts:
+        - name: webhook-certs
+          mountPath: /etc/webhook/certs
+          readOnly: true
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: mesh-webhook-certs
+            defaultMode: 0400

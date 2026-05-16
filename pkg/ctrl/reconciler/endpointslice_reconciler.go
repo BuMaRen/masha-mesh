@@ -18,7 +18,7 @@ func NewEndpointSliceReconciler(cache data.Cache, distributer distributer.Distri
 // TODO: only pushing all notifications for now; switch to incremental updates later.
 func (r *EndpointSliceReconciler) OnAdded(obj any) {
 	if changed, svcName := r.cache.OnAdded(obj); changed {
-		if mergedEs, ok := r.cache.GetMerged(svcName); ok {
+		if mergedEs, ok := r.cache.GetCache(svcName); ok {
 			r.distributer.Publish(svcName, mesh.OpType_ADDED, mergedEs)
 		}
 	}
@@ -26,7 +26,7 @@ func (r *EndpointSliceReconciler) OnAdded(obj any) {
 
 func (r *EndpointSliceReconciler) OnUpdated(oldObj, newObj any) {
 	if changed, svcName := r.cache.OnUpdate(oldObj, newObj); changed {
-		if mergedEs, ok := r.cache.GetMerged(svcName); ok {
+		if mergedEs, ok := r.cache.GetCache(svcName); ok {
 			r.distributer.Publish(svcName, mesh.OpType_MODIFIED, mergedEs)
 		}
 	}
@@ -34,7 +34,7 @@ func (r *EndpointSliceReconciler) OnUpdated(oldObj, newObj any) {
 
 func (r *EndpointSliceReconciler) OnDeleted(obj any) {
 	if changed, svcName, deleteAll := r.cache.OnDelete(obj); changed {
-		mergedEs, ok := r.cache.GetMerged(svcName)
+		mergedEs, ok := r.cache.GetCache(svcName)
 		if deleteAll {
 			r.distributer.Publish(svcName, mesh.OpType_DELETED, mergedEs)
 			return

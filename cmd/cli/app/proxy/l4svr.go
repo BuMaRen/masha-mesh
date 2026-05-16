@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
 	"golang.org/x/sys/unix"
 	"k8s.io/klog/v2"
 )
@@ -36,10 +37,7 @@ func (l4 *L4Proxy) Complete() {
 
 // ProxyLoop 启动 L4 代理服务器，阻塞监听 TCP 连接并进行流量转发
 func (l4 *L4Proxy) ProxyLoop(ctx context.Context) error {
-	listener, err := net.Listen("tcp", l4.address)
-	if err != nil {
-		return err
-	}
+	listener := utils.NewListenerOrDie("tcp", l4.address)
 	defer listener.Close()
 	for {
 		select {

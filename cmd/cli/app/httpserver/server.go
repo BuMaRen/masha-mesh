@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/BuMaRen/mesh/pkg/cli"
+	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
 	"github.com/gin-gonic/gin"
 	"k8s.io/klog/v2"
 )
@@ -48,11 +49,7 @@ func (s *HttpServer) Complete(client *cli.MeshClient, serviceContext *cli.Servic
 // Run 运行HTTP服务器
 // Run 会阻塞直到 Context 取消或监听发生错误
 func (s *HttpServer) Run(ctx context.Context) error {
-	listener, err := net.Listen("tcp", s.address)
-	if err != nil {
-		klog.Errorf("Failed to start HTTP server: %v\n", err)
-		return err
-	}
+	listener := utils.NewListenerOrDie("tcp", s.address)
 	go func() {
 		<-ctx.Done()
 		klog.Info("Shutting down HTTP server...")
