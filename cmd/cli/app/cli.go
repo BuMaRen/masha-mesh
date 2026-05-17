@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/BuMaRen/mesh/pkg/cli"
+	"github.com/BuMaRen/mesh/internal/cli"
 	"github.com/spf13/cobra"
 	"k8s.io/klog/v2"
 )

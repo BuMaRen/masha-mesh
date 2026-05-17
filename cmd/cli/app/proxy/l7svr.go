@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 
-	"github.com/BuMaRen/mesh/pkg/cli"
+	"github.com/BuMaRen/mesh/internal/cli"
 	"k8s.io/klog/v2"
 )
 

@@ -3,7 +3,7 @@ package proxy
 import (
 	"context"
 
-	"github.com/BuMaRen/mesh/pkg/cli"
+	"github.com/BuMaRen/mesh/internal/cli"
 	"k8s.io/klog/v2"
 )
 

@@ -3,7 +3,7 @@ package app
 import (
 	"github.com/BuMaRen/mesh/cmd/cli/app/httpserver"
 	"github.com/BuMaRen/mesh/cmd/cli/app/proxy"
-	"github.com/BuMaRen/mesh/pkg/cli"
+	"github.com/BuMaRen/mesh/internal/cli"
 	"github.com/spf13/cobra"
 )
 
