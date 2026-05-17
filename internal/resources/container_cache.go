@@ -1,25 +1,25 @@
-package data
+package resources
 
 import (
 	"sync"
 
-	"github.com/BuMaRen/mesh/pkg/ctrl/resources"
+	"github.com/BuMaRen/mesh/pkg/cache"
 )
 
 type ContainersCache struct {
 	mtx  sync.Mutex
-	ctns map[string]*resources.Container
+	ctns map[string]*Container
 }
 
 func NewContainersCache() *ContainersCache {
 	return &ContainersCache{
-		ctns: make(map[string]*resources.Container),
+		ctns: make(map[string]*Container),
 		mtx:  sync.Mutex{},
 	}
 }
 
 func (c *ContainersCache) OnAdded(obj any) (bool, string) {
-	container := resources.ParseContainer(obj)
+	container := ParseContainer(obj)
 	if container == nil {
 		return false, ""
 	}
@@ -30,7 +30,7 @@ func (c *ContainersCache) OnAdded(obj any) (bool, string) {
 }
 
 func (c *ContainersCache) OnUpdate(oldObj, newObj any) (bool, string) {
-	container := resources.ParseContainer(newObj)
+	container := ParseContainer(newObj)
 	if container == nil {
 		return false, ""
 	}
@@ -41,7 +41,7 @@ func (c *ContainersCache) OnUpdate(oldObj, newObj any) (bool, string) {
 }
 
 func (c *ContainersCache) OnDelete(obj any) (bool, string, bool) {
-	container := resources.ParseContainer(obj)
+	container := ParseContainer(obj)
 	if container == nil {
 		return false, "", true
 	}
@@ -61,7 +61,4 @@ func (c *ContainersCache) GetCache(name string) (any, bool) {
 	return container, true
 }
 
-type ContainerQueueItem struct {
-	Key string
-	Op  string
-}
+var _ cache.Cache = (*ContainersCache)(nil)

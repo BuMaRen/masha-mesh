@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
+	"github.com/BuMaRen/mesh/pkg/utils"
 	"golang.org/x/sys/unix"
 	"k8s.io/klog/v2"
 )

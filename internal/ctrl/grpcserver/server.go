@@ -1,10 +1,13 @@
-package ctrl
+package grpcserver
 
 import (
+	"context"
 	"sync"
 
+	"github.com/BuMaRen/mesh/internal/ctrl/utils"
 	"github.com/BuMaRen/mesh/pkg/api/mesh"
-	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
+	"github.com/BuMaRen/mesh/pkg/metrics"
+	pubutils "github.com/BuMaRen/mesh/pkg/utils"
 	"google.golang.org/grpc"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/klog/v2"
@@ -22,19 +25,16 @@ type GrpcServer struct {
 	mesh.UnimplementedMeshCtrlServer
 }
 
-// Publish 给所有的 sidecar 注册进来的 channel 分发消息，理应不阻塞
-func (s *GrpcServer) Publish(svcName string, opType mesh.OpType, obj any) {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
+func (s *GrpcServer) GetSidecar(svcName string) *utils.Sidecar {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
 
-	klog.Infof("[GrpcServer][Publish] Publishing update for service %s to %d sidecars\n", svcName, len(s.sidecars))
-	for sidecarID, sidecar := range s.sidecars {
-		klog.Infof("[GrpcServer][Publish] Publishing update for service %s to sidecar %s(sub service: %s)\n", svcName, sidecarID, sidecar.SubServiceName)
+	for _, sidecar := range s.sidecars {
 		if sidecar.SubServiceName == svcName {
-			sidecar.Informer(opType, obj)
+			return sidecar
 		}
 	}
-	klog.Infof("[GrpcServer][Publish] Finished publishing update for service %s to all sidecars\n", svcName)
+	return nil
 }
 
 // RPC:Subcribe sidecar 订阅某个 service 的 EndpointSlice 变化事件，服务端通过 channel 推送消息
@@ -55,6 +55,9 @@ func (s *GrpcServer) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStre
 	s.sidecars[sr.SidecarId] = sidecar
 	s.mtx.Unlock()
 
+	metrics.SideCarsConnected.Inc()
+	defer metrics.SideCarsConnected.Dec()
+
 	defer func() {
 		s.mtx.Lock()
 		delete(s.sidecars, sr.SidecarId)
@@ -73,22 +76,27 @@ func (s *GrpcServer) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStre
 	return nil
 }
 
+func (s *GrpcServer) ListenAndServe(ctx context.Context, opts *Options) error {
+	network := opts.network
+	address := opts.address
+
+	listener := pubutils.NewListenerOrDie(network, address)
+	defer listener.Close()
+
+	grpcServer := grpc.NewServer()
+	mesh.RegisterMeshCtrlServer(grpcServer, s)
+
+	go func() {
+		<-ctx.Done()
+		grpcServer.GracefulStop()
+	}()
+
+	return grpcServer.Serve(listener)
+}
+
 func NewGrpcServer() *GrpcServer {
 	return &GrpcServer{
 		sidecars: make(map[string]*utils.Sidecar, mapInitialSize),
 		mtx:      &sync.RWMutex{},
 	}
-}
-
-func (s *GrpcServer) Compelete(fn func(string) (*discoveryv1.EndpointSlice, bool)) *grpc.Server {
-	s.listFn = fn
-	grpcServer := grpc.NewServer()
-	mesh.RegisterMeshCtrlServer(grpcServer, s)
-	return grpcServer
-}
-
-func NewCompletedGrpcServer() *grpc.Server {
-	grpcServer := grpc.NewServer()
-	mesh.RegisterMeshCtrlServer(grpcServer, NewGrpcServer())
-	return grpcServer
 }

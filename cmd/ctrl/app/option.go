@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/BuMaRen/mesh/pkg/ctrl"
+	"github.com/BuMaRen/mesh/internal/ctrl"
 	"github.com/spf13/cobra"
 	"k8s.io/klog/v2"
 )

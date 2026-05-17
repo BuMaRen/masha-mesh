@@ -1,6 +1,7 @@
-package data
+package resources
 
 import (
+	"github.com/BuMaRen/mesh/pkg/cache"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -119,4 +120,4 @@ func (c EndpointSliceCache) GetCache(svcName string) (any, bool) {
 	return dEs.GetMerged(), true
 }
 
-var _ Cache = EndpointSliceCache{}
+var _ cache.Cache = EndpointSliceCache{}

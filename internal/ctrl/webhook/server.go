@@ -5,15 +5,15 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/BuMaRen/mesh/pkg/ctrl/data"
-	"github.com/BuMaRen/mesh/pkg/ctrl/resources"
-	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
+	"github.com/BuMaRen/mesh/internal/resources"
+	"github.com/BuMaRen/mesh/pkg/cache"
+	"github.com/BuMaRen/mesh/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"k8s.io/klog/v2"
 )
 
 type WebhookServer struct {
-	containerCache data.Cache
+	containerCache cache.Cache
 	injectionLabel string
 }
 
@@ -25,7 +25,7 @@ func WithInjectionLabel(label string) WebOption {
 	}
 }
 
-func NewWebhookServer(containerCache data.Cache, opts ...WebOption) *WebhookServer {
+func NewWebhookServer(containerCache cache.Cache, opts ...WebOption) *WebhookServer {
 	server := &WebhookServer{
 		containerCache: containerCache,
 	}

@@ -6,7 +6,7 @@ import (
 	"net"
 
 	"github.com/BuMaRen/mesh/pkg/cli"
-	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
+	"github.com/BuMaRen/mesh/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"k8s.io/klog/v2"
 )

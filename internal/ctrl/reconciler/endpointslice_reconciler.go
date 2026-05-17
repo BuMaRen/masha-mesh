@@ -1,17 +1,17 @@
 package reconciler
 
 import (
+	"github.com/BuMaRen/mesh/internal/ctrl/distributer"
 	"github.com/BuMaRen/mesh/pkg/api/mesh"
-	"github.com/BuMaRen/mesh/pkg/ctrl/data"
-	"github.com/BuMaRen/mesh/pkg/ctrl/distributer"
+	"github.com/BuMaRen/mesh/pkg/cache"
 )
 
 type EndpointSliceReconciler struct {
-	cache       data.Cache
+	cache       cache.Cache
 	distributer distributer.Distributer
 }
 
-func NewEndpointSliceReconciler(cache data.Cache, distributer distributer.Distributer) Reconciler {
+func NewEndpointSliceReconciler(cache cache.Cache, distributer distributer.Distributer) Reconciler {
 	return &EndpointSliceReconciler{cache: cache, distributer: distributer}
 }
 

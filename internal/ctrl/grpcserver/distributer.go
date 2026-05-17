@@ -1,8 +1,8 @@
 package grpcserver
 
 import (
+	"github.com/BuMaRen/mesh/internal/ctrl/distributer"
 	"github.com/BuMaRen/mesh/pkg/api/mesh"
-	"github.com/BuMaRen/mesh/pkg/ctrl/distributer"
 )
 
 func (d *GrpcServer) Publish(svcName string, opType mesh.OpType, obj any) {

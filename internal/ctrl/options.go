@@ -1,9 +1,9 @@
 package ctrl
 
 import (
-	"github.com/BuMaRen/mesh/pkg/ctrl/grpcserver"
-	"github.com/BuMaRen/mesh/pkg/ctrl/metrics"
-	"github.com/BuMaRen/mesh/pkg/ctrl/webhook"
+	"github.com/BuMaRen/mesh/internal/ctrl/grpcserver"
+	"github.com/BuMaRen/mesh/internal/ctrl/webhook"
+	"github.com/BuMaRen/mesh/pkg/metrics"
 	"github.com/spf13/cobra"
 )
 

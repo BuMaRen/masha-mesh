@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/BuMaRen/mesh/pkg/ctrl/utils"
+	"github.com/BuMaRen/mesh/pkg/utils"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"k8s.io/klog/v2"
 )
