@@ -1,18 +1,22 @@
-package httpserver
+package stgsvr
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"k8s.io/klog/v2"
 )
 
-func (s *HttpServer) attachHandlers(ctx context.Context) {
+// 用于策略的动态更新
+
+func (s *Server) attachHandlers(ctx context.Context) {
 	s.engine.POST("/service/:svc-name", s.subscribeChain(ctx, "svc-name")...)
 	s.engine.DELETE("/service/:svc-name", s.unsubscribeChain(ctx, "svc-name")...)
 }
 
-func (s *HttpServer) subscribeChain(ctx context.Context, key string) []gin.HandlerFunc {
+func (s *Server) subscribeChain(ctx context.Context, key string) []gin.HandlerFunc {
 	handlers := []gin.HandlerFunc{}
 	handlers = append(handlers, func(c *gin.Context) {
 		serviceName := c.Param(key)
@@ -38,7 +42,7 @@ func (s *HttpServer) subscribeChain(ctx context.Context, key string) []gin.Handl
 	return handlers
 }
 
-func (s *HttpServer) unsubscribeChain(_ context.Context, key string) []gin.HandlerFunc {
+func (s *Server) unsubscribeChain(_ context.Context, key string) []gin.HandlerFunc {
 	handlers := []gin.HandlerFunc{}
 	handlers = append(handlers, func(c *gin.Context) {
 		if serviceName := c.Param(key); serviceName != "" {
@@ -57,4 +61,19 @@ func (s *HttpServer) unsubscribeChain(_ context.Context, key string) []gin.Handl
 		c.JSON(http.StatusOK, gin.H{"message": "unsubscribe successfully"})
 	})
 	return handlers
+}
+
+func (s *Server) subscribe(parent context.Context, serviceName string) error {
+	ctx := s.svcContext.NewServiceContext(parent, serviceName)
+	return s.client.Subscribe(ctx, serviceName)
+}
+
+func (s *Server) unsubscribe(serviceName string) error {
+	cancel, existed := s.svcContext.GetCancel(serviceName)
+	if !existed {
+		klog.Errorf("service %v not found", serviceName)
+		return fmt.Errorf("service %v not found", serviceName)
+	}
+	cancel()
+	return s.client.Unsubscribe(context.TODO(), serviceName)
 }

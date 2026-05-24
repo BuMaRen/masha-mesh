@@ -1,4 +1,4 @@
-package cli
+package stgsvr
 
 // 管理订阅Service所用的context
 // 维护一个map，key是serviceName，value是一个cancelFunc

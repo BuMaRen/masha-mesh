@@ -1,4 +1,4 @@
-package proxy
+package l4
 
 import (
 	"bufio"

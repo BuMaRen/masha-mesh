@@ -1,4 +1,4 @@
-package cli
+package rpcclient
 
 import (
 	"sync"
@@ -33,10 +33,10 @@ type ServiceCache struct {
 	cache map[string]*Endpoints
 }
 
-func NewServiceCache(capacity int) *ServiceCache {
+func NewServiceCache(opts *Options) *ServiceCache {
 	return &ServiceCache{
 		mtx:   &sync.RWMutex{},
-		cache: make(map[string]*Endpoints, capacity),
+		cache: make(map[string]*Endpoints, opts.capacity),
 	}
 }
 

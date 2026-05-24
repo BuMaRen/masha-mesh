@@ -1,4 +1,4 @@
-package cli
+package rpcclient
 
 import (
 	"context"
@@ -19,24 +19,24 @@ func NewRpcClient(remote string) mesh.MeshCtrlClient {
 }
 
 type MeshClient struct {
-	id string
-
+	id           string
+	remote       string
 	serviceCache *ServiceCache
 	connection   *grpc.ClientConn
 	grpcClient   mesh.MeshCtrlClient
 	connected    bool
 }
 
-func NewMeshClient(id string, serviceCache *ServiceCache) *MeshClient {
+func NewMeshClient(serviceCache *ServiceCache, opts *Options) *MeshClient {
 	return &MeshClient{
-		id:           id,
+		id:           opts.uid,
 		serviceCache: serviceCache,
-		// serviceCache: NewServiceCache(serviceCapacity),
+		remote:       opts.remote,
 	}
 }
 
-func (c *MeshClient) Connect(target string) {
-	grpcConn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+func (c *MeshClient) Connect() {
+	grpcConn, err := grpc.NewClient(c.remote, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		klog.Error("Failed to create gRPC client: ", err)
 		panic(err)

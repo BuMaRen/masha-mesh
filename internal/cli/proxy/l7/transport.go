@@ -1,4 +1,4 @@
-package proxy
+package l7
 
 import (
 	"bytes"
@@ -13,34 +13,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// The transport used to perform proxy requests.
-// If nil, http.DefaultTransport is used.
-
-// RoundTrip executes a single HTTP transaction, returning
-// a Response for the provided Request.
-//
-// RoundTrip should not attempt to interpret the response. In
-// particular, RoundTrip must return err == nil if it obtained
-// a response, regardless of the response's HTTP status code.
-// A non-nil err should be reserved for failure to obtain a
-// response. Similarly, RoundTrip should not attempt to
-// handle higher-level protocol details such as redirects,
-// authentication, or cookies.
-//
-// RoundTrip should not modify the request, except for
-// consuming and closing the Request's Body. RoundTrip may
-// read fields of the request in a separate goroutine. Callers
-// should not mutate or reuse the request until the Response's
-// Body has been closed.
-//
-// RoundTrip must always close the body, including on errors,
-// but depending on the implementation may do so in a separate
-// goroutine even after RoundTrip returns. This means that
-// callers wanting to reuse the body for subsequent requests
-// must arrange to wait for the Close call before doing so.
-//
-// The Request's URL and Header fields must be initialized.
-func (l7 *L7Proxy) RoundTrip(req *http.Request) (*http.Response, error) {
+func (s *Server) RoundTrip(req *http.Request) (*http.Response, error) {
 	svrHost, svrPort, isService := serviceAsHost(req.Host)
 	klog.Infof("L7 Proxy: Received request for host: %s, service: %s, port: %s", req.Host, svrHost, svrPort)
 	if !isService {
@@ -57,13 +30,17 @@ func (l7 *L7Proxy) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("failed to read request body: %+v", err)
 	}
 
-	eps := l7.availableEndpoints(svrHost)
+	eps := s.availableEndpoints(svrHost)
 	for _, ep := range eps {
 		klog.Infof("L7 Proxy: Attempting to proxy request to endpoint: %s:%s", ep, svrPort)
+		// TODO：需要改造doCopiedRequest，按返回的错误用来指示breaker做增减
 		resp, err := doCopiedRequest(req, buffer, ep, svrPort)
 		if err != nil {
+			// s.breakers.AddFailed(ep)
 			continue
 		}
+		// TODO: 现在统计的是所有endpointslice的成功数量
+		// s.breakers.AddSuccess(ep)
 		return resp, nil
 	}
 	return nil, fmt.Errorf("proxy failed to get response from all endpoints")
@@ -81,9 +58,9 @@ func serviceAsHost(host string) (string, string, bool) {
 	return hostStr, port, net.ParseIP(hostStr) == nil
 }
 
-func (l7 *L7Proxy) availableEndpoints(serviceName string) []string {
+func (s *Server) availableEndpoints(serviceName string) []string {
 	result := []string{}
-	eps := l7.meshClient.GetServiceIps(serviceName)
+	eps := s.client.GetServiceIps(serviceName)
 	for _, ep := range eps {
 		result = append(result, ep[0])
 	}
@@ -116,6 +93,10 @@ func doCopiedRequest(req *http.Request, body []byte, ip, port string) (*http.Res
 		klog.Warningf("request failed with error: %+v", err)
 		return nil, err
 	}
+
+	// TODO: promethus 统计放行、重试、内部失败、外部失败的请求数量
+	// TODO：breaker 熔断器，失败率过高时熔断一段时间
+
 	if resp.StatusCode >= 500 {
 		klog.Warningf("request to %s:%s failed with status code: %d", ip, port, resp.StatusCode)
 		resp.Body.Close()

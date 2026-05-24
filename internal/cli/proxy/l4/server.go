@@ -1,43 +1,25 @@
-package proxy
+package l4
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/BuMaRen/mesh/pkg/utils"
-	"golang.org/x/sys/unix"
 	"k8s.io/klog/v2"
 )
 
-type L4Proxy struct {
-	address string
-	l7Port  int
+type Server struct {
 }
 
-func NewL4RouteServer(address string, l7Port int) *L4Proxy {
-	return &L4Proxy{
-		address: address,
-		l7Port:  l7Port,
-	}
+func NewServer() *Server {
+	return &Server{}
 }
 
-func (l4 *L4Proxy) Complete() {
-	_, _, err := net.SplitHostPort(l4.address)
-	if err != nil {
-		panic(err)
-	}
-}
-
-// ProxyLoop 启动 L4 代理服务器，阻塞监听 TCP 连接并进行流量转发
-func (l4 *L4Proxy) ProxyLoop(ctx context.Context) error {
-	listener := utils.NewListenerOrDie("tcp", l4.address)
+func (s *Server) Run(ctx context.Context, opts *Options) error {
+	listener := utils.NewListenerOrDie("tcp", opts.Address())
 	defer listener.Close()
 	for {
 		select {
@@ -51,17 +33,16 @@ func (l4 *L4Proxy) ProxyLoop(ctx context.Context) error {
 			}
 			if isHttp(conn.Reader) {
 				// Handle HTTP traffic with L7 proxy
-				go l4.transferToL7(ctx, conn, l4.l7Port)
+				go transferToL7(ctx, conn, opts.DstL7Address())
 				continue
 			}
 			// 不是 HTTP 流量，进行 TCP 透传
-			go l4.transmission(ctx, conn.Connection())
+			go transmission(ctx, conn.Connection())
 		}
 	}
 }
 
-// TCP 透传, 将流量直接转发到原始目的地, 直到双端关闭
-func (l4 *L4Proxy) transmission(ctx context.Context, conn net.Conn) {
+func transmission(ctx context.Context, conn net.Conn) {
 	originalDst, err := getOriginalDst(conn)
 	if err != nil {
 		klog.Errorf("get remote ip from conn failed with error: %+v", err)
@@ -110,9 +91,8 @@ func (l4 *L4Proxy) transmission(ctx context.Context, conn net.Conn) {
 	wg.Wait()
 }
 
-// 将 HTTP 流量转发到 L7 代理, 直到双端关闭
-func (l4 *L4Proxy) transferToL7(ctx context.Context, conn *IoWR, l7Port int) {
-	output, err := net.DialTimeout("tcp", fmt.Sprintf(":%v", l7Port), 5*time.Second)
+func transferToL7(ctx context.Context, conn *IoWR, l7Address string) {
+	output, err := net.DialTimeout("tcp", l7Address, 5*time.Second)
 	if err != nil {
 		klog.Errorf("dialing to http server: %v", err)
 		conn.Close()
@@ -154,44 +134,4 @@ func (l4 *L4Proxy) transferToL7(ctx context.Context, conn *IoWR, l7Port int) {
 		}
 	}()
 	wg.Wait()
-}
-
-func isHttp(conn *bufio.Reader) bool {
-	peek, err := conn.Peek(64)
-	if err != nil {
-		return false
-	}
-	return bytes.HasPrefix(peek, []byte("GET ")) ||
-		bytes.HasPrefix(peek, []byte("POST ")) ||
-		bytes.HasPrefix(peek, []byte("HEAD ")) ||
-		bytes.HasPrefix(peek, []byte("PUT ")) ||
-		bytes.HasPrefix(peek, []byte("DELETE ")) ||
-		bytes.HasPrefix(peek, []byte("OPTIONS ")) ||
-		bytes.HasPrefix(peek, []byte("CONNECT ")) ||
-		bytes.HasPrefix(peek, []byte("TRACE ")) ||
-		bytes.HasPrefix(peek, []byte("HTTP/1. "))
-}
-
-func getOriginalDst(conn net.Conn) (*net.TCPAddr, error) {
-	tcpConn, ok := conn.(*net.TCPConn)
-	if !ok {
-		return nil, fmt.Errorf("not a TCP connection")
-	}
-	rawConn, err := tcpConn.SyscallConn()
-	if err != nil {
-		return nil, fmt.Errorf("getting syscall.RawConn: %w", err)
-	}
-	originalDst := &net.TCPAddr{}
-	var sockerr error
-	rawConn.Control(func(fd uintptr) {
-		addr, err := syscall.GetsockoptIPv6Mreq(int(fd), unix.IPPROTO_IP, unix.SO_ORIGINAL_DST)
-		if err != nil {
-			sockerr = err
-			return
-		}
-		ip := net.IPv4(addr.Multiaddr[4], addr.Multiaddr[5], addr.Multiaddr[6], addr.Multiaddr[7])
-		port := int(addr.Multiaddr[2])<<8 + int(addr.Multiaddr[3])
-		originalDst = &net.TCPAddr{IP: ip, Port: port}
-	})
-	return originalDst, sockerr
 }
