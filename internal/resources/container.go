@@ -6,6 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog/v2"
 )
 
 type Container struct {
@@ -35,9 +36,18 @@ func ParseContainer(obj any) *Container {
 
 	c := &Container{}
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, c); err != nil {
+		klog.Errorf("failed to convert unstructured to Container: %v", err)
 		return nil
 	}
 	return c
+}
+
+func Namespace(obj any) string {
+	u := toContainerUnstructured(obj)
+	if u == nil {
+		return "default"
+	}
+	return u.GetNamespace()
 }
 
 func toContainerUnstructured(obj any) *unstructured.Unstructured {
