@@ -9,7 +9,8 @@ spec:
   type: ClusterIP
   ports:
     - port: 50051
-      targetPort: mesh-ctrl-port
-      protocol: TCP
+      targetPort: grpc-port
+    - port: 443
+      targetPort: webhook-port
   selector:
     app: mesh-ctrl
