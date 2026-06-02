@@ -26,8 +26,8 @@ func StartUp(ctx context.Context, opts *Options) {
 	k8sClient := utils.NewKubernetesClientOrDie()
 	dynamicClient := utils.NewDynamicClientOrDie()
 
-	webhookServer := webhook.NewWebhookServer(containerCache, webhook.WithInjectionLabel(opts.label))
 	endpointsliceReconciler := rc.NewEndpointSliceReconciler(epsCache, distributer)
+	webhookServer := webhook.NewWebhookServer(containerCache, webhook.WithInjectionLabel(opts.label))
 	customResourcesReconciler := rc.NewCustomResourcesReconciler(containerCache, opts.label, k8sClient)
 
 	wg := sync.WaitGroup{}

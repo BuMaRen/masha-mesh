@@ -1,8 +1,13 @@
 package reconciler
 
 import (
+	"context"
+	"time"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 )
 
@@ -37,4 +42,18 @@ func statefulsetWithContainerUpdated(sts *appsv1.StatefulSet, newContainer corev
 	spec.InitContainers = containersWithOneUpdated(spec.InitContainers, newContainer)
 	spec.Containers = containersWithOneUpdated(spec.Containers, newContainer)
 	return sts
+}
+
+func updateDeployment(kubeClient kubernetes.Interface, dep *appsv1.Deployment) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := kubeClient.AppsV1().Deployments(dep.Namespace).Update(ctx, dep, metav1.UpdateOptions{})
+	return err
+}
+
+func updateStatefulSet(kubeClient kubernetes.Interface, sts *appsv1.StatefulSet) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := kubeClient.AppsV1().StatefulSets(sts.Namespace).Update(ctx, sts, metav1.UpdateOptions{})
+	return err
 }

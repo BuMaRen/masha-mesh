@@ -7,6 +7,7 @@ import (
 	"github.com/BuMaRen/mesh/internal/resources"
 	"github.com/BuMaRen/mesh/pkg/cache"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
@@ -16,7 +17,7 @@ var CUSTOM_LABEL = "masha.io/injection"
 
 // workQueue 作为一个公共组件从外部注入（webhook也会用到）
 type CustomResourcesReconciler struct {
-	cache      cache.Cache
+	kv         *cache.GeneralCache[*corev1.Container]
 	kubeClient kubernetes.Interface
 	label      string
 }
@@ -25,15 +26,17 @@ type CustomResourcesReconciler struct {
 // 1. 监听资源事件，更新 cache
 // 2. 将事件推送到 workQueue，待 webhook 消费（webhook 只做 Add 事件）
 // 3. 同时更新依赖 container 的其他资源
-func NewCustomResourcesReconciler(cache cache.Cache, label string, kubeClient kubernetes.Interface) *CustomResourcesReconciler {
+func NewCustomResourcesReconciler(kv *cache.GeneralCache[*corev1.Container], label string, kubeClient kubernetes.Interface) *CustomResourcesReconciler {
 	return &CustomResourcesReconciler{
-		cache:      cache,
 		kubeClient: kubeClient,
 		label:      label,
+		kv:         kv,
 	}
 }
 
-func (r *CustomResourcesReconciler) listDeployments(ctx context.Context, nameSpace string) (*appsv1.DeploymentList, error) {
+func (r *CustomResourcesReconciler) listDeployments(nameSpace string) (*appsv1.DeploymentList, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	listOpts := metav1.ListOptions{
 		LabelSelector: metav1.FormatLabelSelector(&metav1.LabelSelector{
 			MatchExpressions: []metav1.LabelSelectorRequirement{
@@ -44,7 +47,9 @@ func (r *CustomResourcesReconciler) listDeployments(ctx context.Context, nameSpa
 	return r.kubeClient.AppsV1().Deployments(nameSpace).List(ctx, listOpts)
 }
 
-func (r *CustomResourcesReconciler) listStatefulSets(ctx context.Context, nameSpace string) (*appsv1.StatefulSetList, error) {
+func (r *CustomResourcesReconciler) listStatefulSets(nameSpace string) (*appsv1.StatefulSetList, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	listOpts := metav1.ListOptions{
 		LabelSelector: metav1.FormatLabelSelector(&metav1.LabelSelector{
 			MatchExpressions: []metav1.LabelSelectorRequirement{
@@ -57,43 +62,43 @@ func (r *CustomResourcesReconciler) listStatefulSets(ctx context.Context, nameSp
 
 // TODO: 添加的时候只做缓存，注入交给 webhook
 func (r *CustomResourcesReconciler) OnAdded(obj any) {
-	changed, _ := r.cache.OnAdded(obj)
-	if !changed {
+	customContainer := resources.ParseContainer(obj)
+	if customContainer == nil {
 		klog.Warningf("added object is not a valid container, skipping: %v", obj)
 		return
 	}
+	coreContainer := customContainer.ToCoreV1Container()
+	_, ok := r.kv.Add(coreContainer.Name, &coreContainer)
+	klog.Infof("container %s added to cache, exist before: %v", coreContainer.Name, !ok)
 }
 
 func (r *CustomResourcesReconciler) OnUpdated(oldObj, newObj any) {
-	if changed, _ := r.cache.OnUpdate(oldObj, newObj); !changed {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	customContainer := resources.ParseContainer(newObj)
-	if customContainer == nil {
+	newContainer := resources.ParseContainer(newObj)
+	if newContainer == nil {
 		klog.Errorf("updated object is not a valid container, skipping: %v", newObj)
 		return
 	}
-	nameSpace := customContainer.Namespace
+	coreContainer := newContainer.ToCoreV1Container()
+	if _, ok := r.kv.Update(coreContainer.Name, &coreContainer); !ok {
+		return
+	}
+	nameSpace := newContainer.Namespace
 
 	// ===== 更新 Deployment =====
-	if deployments, err := r.listDeployments(ctx, nameSpace); err == nil {
+	if deployments, err := r.listDeployments(nameSpace); err == nil {
 		for _, dep := range deployments.Items {
-			newDeploy := deployWithContainerUpdated(&dep, customContainer.ToCoreV1Container())
-			if _, err := r.kubeClient.AppsV1().Deployments(dep.Namespace).Update(ctx, newDeploy, metav1.UpdateOptions{}); err != nil {
+			newDeploy := deployWithContainerUpdated(&dep, newContainer.ToCoreV1Container())
+			if err := updateDeployment(r.kubeClient, newDeploy); err != nil {
 				klog.Errorf("update deployment %s/%s failed: %v", dep.Namespace, dep.Name, err)
 			}
 		}
 	}
 
 	// ===== 更新 StatefulSet =====
-	if statefulSets, err := r.listStatefulSets(ctx, nameSpace); err == nil {
+	if statefulSets, err := r.listStatefulSets(nameSpace); err == nil {
 		for _, sts := range statefulSets.Items {
-			newSts := statefulsetWithContainerUpdated(&sts, customContainer.ToCoreV1Container())
-			if _, err := r.kubeClient.AppsV1().StatefulSets(sts.Namespace).Update(ctx, newSts, metav1.UpdateOptions{}); err != nil {
+			newSts := statefulsetWithContainerUpdated(&sts, newContainer.ToCoreV1Container())
+			if err := updateStatefulSet(r.kubeClient, newSts); err != nil {
 				klog.Errorf("update statefulset %s/%s failed: %v", sts.Namespace, sts.Name, err)
 			}
 		}
@@ -101,31 +106,33 @@ func (r *CustomResourcesReconciler) OnUpdated(oldObj, newObj any) {
 }
 
 func (r *CustomResourcesReconciler) OnDeleted(obj any) {
-	changed, containerName, _ := r.cache.OnDelete(obj)
-	if !changed {
+	container := resources.ParseContainer(obj)
+	if container == nil {
+		klog.Errorf("deleted object is not a valid container, skipping: %v", obj)
 		return
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	nameSpace := resources.Namespace(obj)
+	coreContainer := container.ToCoreV1Container()
+	if _, ok := r.kv.Delete(coreContainer.Name); !ok {
+		return
+	}
+	nameSpace := container.Namespace
+	containerName := container.Spec.Name
 
 	// 更新 Deployment：仅移除目标 container，不删除整个 workload
-	if deployments, err := r.listDeployments(ctx, nameSpace); err == nil {
+	if deployments, err := r.listDeployments(nameSpace); err == nil {
 		for _, dep := range deployments.Items {
 			newDeploy := deployWithContainerRemoved(&dep, containerName)
-			if _, err := r.kubeClient.AppsV1().Deployments(dep.Namespace).Update(ctx, newDeploy, metav1.UpdateOptions{}); err != nil {
+			if err := updateDeployment(r.kubeClient, newDeploy); err != nil {
 				klog.Errorf("update deployment %s/%s failed while removing container %q: %v", dep.Namespace, dep.Name, containerName, err)
 			}
 		}
 	}
 
 	// 更新 StatefulSet：仅移除目标 container，不删除整个 workload
-	if statefulSets, err := r.listStatefulSets(ctx, nameSpace); err == nil {
+	if statefulSets, err := r.listStatefulSets(nameSpace); err == nil {
 		for _, sts := range statefulSets.Items {
 			newSts := statefulsetWithContainerRemoved(&sts, containerName)
-			if _, err := r.kubeClient.AppsV1().StatefulSets(sts.Namespace).Update(ctx, newSts, metav1.UpdateOptions{}); err != nil {
+			if err := updateStatefulSet(r.kubeClient, newSts); err != nil {
 				klog.Errorf("update statefulset %s/%s failed while removing container %q: %v", sts.Namespace, sts.Name, containerName, err)
 			}
 		}
