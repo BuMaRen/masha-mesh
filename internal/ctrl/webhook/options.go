@@ -5,10 +5,9 @@ import (
 )
 
 type Options struct {
-	certFile       string
-	keyFile        string
-	address        string
-	injectionLabel string
+	certFile string
+	keyFile  string
+	address  string
 }
 
 func (o *Options) AddFlags(cmd *cobra.Command) {

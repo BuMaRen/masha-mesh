@@ -13,8 +13,6 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var CUSTOM_LABEL = "masha.io/injection"
-
 // workQueue 作为一个公共组件从外部注入（webhook也会用到）
 type CustomResourcesReconciler struct {
 	kv         *cache.GeneralCache[*corev1.Container]
@@ -72,6 +70,7 @@ func (r *CustomResourcesReconciler) OnAdded(obj any) {
 	klog.Infof("container %s added to cache, exist before: %v", coreContainer.Name, !ok)
 }
 
+// TODO：如何面对 containerName 变化的情况？极低价值
 func (r *CustomResourcesReconciler) OnUpdated(oldObj, newObj any) {
 	newContainer := resources.ParseContainer(newObj)
 	if newContainer == nil {
@@ -87,7 +86,7 @@ func (r *CustomResourcesReconciler) OnUpdated(oldObj, newObj any) {
 	// ===== 更新 Deployment =====
 	if deployments, err := r.listDeployments(nameSpace); err == nil {
 		for _, dep := range deployments.Items {
-			newDeploy := deployWithContainerUpdated(&dep, newContainer.ToCoreV1Container())
+			newDeploy := deployWithContainerUpdated(&dep, coreContainer)
 			if err := updateDeployment(r.kubeClient, newDeploy); err != nil {
 				klog.Errorf("update deployment %s/%s failed: %v", dep.Namespace, dep.Name, err)
 			}
@@ -97,7 +96,7 @@ func (r *CustomResourcesReconciler) OnUpdated(oldObj, newObj any) {
 	// ===== 更新 StatefulSet =====
 	if statefulSets, err := r.listStatefulSets(nameSpace); err == nil {
 		for _, sts := range statefulSets.Items {
-			newSts := statefulsetWithContainerUpdated(&sts, newContainer.ToCoreV1Container())
+			newSts := statefulsetWithContainerUpdated(&sts, coreContainer)
 			if err := updateStatefulSet(r.kubeClient, newSts); err != nil {
 				klog.Errorf("update statefulset %s/%s failed: %v", sts.Namespace, sts.Name, err)
 			}

@@ -8,9 +8,11 @@ import (
 	rc "github.com/BuMaRen/mesh/internal/ctrl/reconciler"
 	"github.com/BuMaRen/mesh/internal/ctrl/webhook"
 	"github.com/BuMaRen/mesh/internal/resources"
+	"github.com/BuMaRen/mesh/pkg/cache"
 	"github.com/BuMaRen/mesh/pkg/metrics"
 	"github.com/BuMaRen/mesh/pkg/utils"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8Cache "k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -20,14 +22,14 @@ func StartUp(ctx context.Context, opts *Options) {
 	grpcSvr := grpcserver.NewGrpcServer()
 	distributer := grpcSvr.Distributer()
 
-	containerCache := resources.NewContainersCache()
+	containerCache := cache.NewGeneralCache[*corev1.Container]()
 	epsCache := resources.NewEndpointSliceCache()
 
 	k8sClient := utils.NewKubernetesClientOrDie()
 	dynamicClient := utils.NewDynamicClientOrDie()
 
+	webhookServer := webhook.NewWebhookServer(containerCache, opts.label)
 	endpointsliceReconciler := rc.NewEndpointSliceReconciler(epsCache, distributer)
-	webhookServer := webhook.NewWebhookServer(containerCache, webhook.WithInjectionLabel(opts.label))
 	customResourcesReconciler := rc.NewCustomResourcesReconciler(containerCache, opts.label, k8sClient)
 
 	wg := sync.WaitGroup{}

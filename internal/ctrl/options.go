@@ -26,6 +26,7 @@ func NewOptions() *Options {
 }
 
 func (o *Options) AddFlags(cmd *cobra.Command) {
+	// label 指定 pod 中的 label key，其值用于确定需要注入的容器名称
 	cmd.Flags().StringVar(&o.label, "label", "masha.io/injection", "Label to select workloads for injection")
 	cmd.Flags().StringVar(&o.gvrVersion, "gvr-version", "v1", "Version of the GVR to watch")
 	cmd.Flags().StringVar(&o.gvrGroup, "gvr-group", "masha.io", "Group of the GVR to watch")
