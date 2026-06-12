@@ -1,0 +1,54 @@
+flowchart TD
+    %% OnAdded
+    D(["OnAdded(obj)"]) --> E{"ParseContainer(obj)"}
+    E -->|"nil"| F["打印日志，不做处理"]
+    E -->|"valid"| G["ToCoreV1Container() 转换成存储允许的类型"]
+    G --> H["kv.Add(name, container) 添加到缓存"]
+
+    %% OnUpdated
+    J(["OnUpdated(oldObj, newObj)"]) --> K{"ParseContainer(newObj)"}
+    K -->|"nil"| L["打印日志，不做处理"]
+    K -->|"valid"| M["ToCoreV1Container() 转换成存储允许的类型"]
+    M --> N{"kv.Update(name, container) 更新缓存"}
+    N -->|"not ok"| O["缓存更新失败，不予更新"]
+    N -->|"ok"| P["listDeployments(namespace)"]
+    P --> Q{"获取 deployments 成功？"}
+    Q -->|"yes"| R["for each Deployment"]
+    R --> S["deployWithContainerUpdated() 更新 deploy 中的 container"]
+    S --> T["updateDeployment() 更新 deploy"]
+    T --> U{"error?"}
+    U -->|"yes"| V["**任意更新报错就退出**"]
+    U -->|"no"| R
+    Q -->|"no / done"| W["listStatefulSets(namespace)"]
+    W --> X{"获取 statefulsets 成功？"}
+    X -->|"yes"| Y["for each StatefulSet"]
+    Y --> Z["statefulsetWithContainerUpdated() 更新 statefulset 中的 container"]
+    Z --> AA["updateStatefulSet() 更新 statefulset"]
+    AA --> AB{"error?"}
+    AB -->|"yes"| AC["**任意更新报错就退出**"]
+    AB -->|"no"| Y
+    X -->|"no / done"| AD(["End OnUpdated"])
+
+    %% OnDeleted
+    AE(["OnDeleted(obj)"]) --> AF{"ParseContainer(obj)"}
+    AF -->|"nil"| AG["打印日志，不做处理"]
+    AF -->|"valid"| AH["ToCoreV1Container() 转换成存储允许的类型"]
+    AH --> AI{"kv.Delete(name) 从缓存中删除"}
+    AI -->|"not ok"| AJ["删除失败，直接退出"]
+    AI -->|"ok"| AK["listDeployments(namespace)"]
+    AK --> AL{"获取 deployments 成功？"}
+    AL -->|"yes"| AM["for each Deployment"]
+    AM --> AN["deployWithContainerRemoved() 更新 deploy 中的 container"]
+    AN --> AO["updateDeployment() 更新 deploy"]
+    AO --> AP{"error?"}
+    AP -->|"yes"| AQ["**任意更新报错就退出**"]
+    AP -->|"no"| AM
+    AL -->|"no / done"| AR["listStatefulSets(namespace)"]
+    AR --> AS{"获取 statefulsets 成功？"}
+    AS -->|"yes"| AT["for each StatefulSet"]
+    AT --> AU["statefulsetWithContainerRemoved() 更新 statefulset 中的 container"]
+    AU --> AV["updateStatefulSet() 更新 statefulset"]
+    AV --> AW{"error?"}
+    AW -->|"yes"| AX["**任意更新报错就退出**"]
+    AW -->|"no"| AT
+    AS -->|"no / done"| AY(["End OnDeleted"])

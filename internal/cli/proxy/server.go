@@ -3,31 +3,33 @@ package proxy
 import (
 	"context"
 
-	"github.com/BuMaRen/mesh/internal/cli/proxy/l4"
-	"github.com/BuMaRen/mesh/internal/cli/proxy/l7"
+	"github.com/BuMaRen/mesh/internal/cli/breaker"
 	"github.com/BuMaRen/mesh/internal/cli/rpcclient"
 	"k8s.io/klog/v2"
 )
 
 type Proxy struct {
-	svrL4 *l4.Server
-	svrL7 *l7.Server
+	listener *Listener
 }
 
-func NewProxy(meshClient *rpcclient.MeshClient) *Proxy {
+func NewProxy(meshClient *rpcclient.MeshClient, opts *Options) (*Proxy, error) {
+	if err := opts.LoadConfig(); err != nil {
+		return nil, err
+	}
+
+	var brk *breaker.Breaker
+	if opts.Config() != nil && opts.Config().HTTP.Enabled {
+		brk = breaker.NewBreaker(opts.BreakerOptions())
+	}
+
+	listener := NewListener(meshClient, opts.Config(), brk)
+
 	return &Proxy{
-		svrL4: l4.NewServer(),
-		svrL7: l7.NewServer(meshClient),
-	}
+		listener: listener,
+	}, nil
 }
 
-func (p *Proxy) Run(ctx context.Context, opts *Options) {
-	go func() {
-		if err := p.svrL4.Run(ctx, opts.L4Options()); err != nil {
-			klog.Errorf("l4 proxy loop failed with error: %+v", err)
-		}
-	}()
-	if err := p.svrL7.Run(ctx, opts.L7Options()); err != nil {
-		klog.Errorf("l7 proxy run failed with error: %+v", err)
-	}
+func (p *Proxy) Run(ctx context.Context, opts *Options) error {
+	klog.Infof("Starting proxy on %s", opts.ListenAddress())
+	return p.listener.Listen(ctx, opts.ListenAddress())
 }
