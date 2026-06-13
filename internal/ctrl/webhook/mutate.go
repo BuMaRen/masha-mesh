@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/BuMaRen/mesh/pkg/cache"
-	"github.com/gin-gonic/gin"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -81,62 +80,73 @@ func responsePatch(UID types.UID, container *corev1.Container) *admissionv1.Admi
 	}
 }
 
-func mutateHandler(kv *cache.GeneralCache[*corev1.Container], label string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// admissionReview 的 JSON 反序列化，失败则返回错误响应
-		admissionReview := admissionv1.AdmissionReview{}
-		if err := c.ShouldBindJSON(&admissionReview); err != nil || admissionReview.Request == nil {
-			c.JSON(http.StatusBadRequest, &admissionv1.AdmissionReview{
-				Response: &admissionv1.AdmissionResponse{
-					Allowed: false,
-				},
-			})
-			return
-		}
+type mutateHandler struct {
+	kv    *cache.GeneralCache[*corev1.Container]
+	label string
+}
 
-		// 获取 pod，获取失败后返回错误（非 pod 不应该被发到这个服务端点）
-		pod, valid := getPodFromAdmissionReview(&admissionReview)
-		if !valid {
-			c.JSON(http.StatusBadRequest, &admissionv1.AdmissionReview{
-				Response: &admissionv1.AdmissionResponse{
-					UID:     admissionReview.Request.UID,
-					Allowed: false,
-				},
-			})
-			return
-		}
+func responseAdmissionReview(w http.ResponseWriter, statusCode int, body *admissionv1.AdmissionReview) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if body != nil {
+		json.NewEncoder(w).Encode(body)
+	}
+}
 
-		// 检查 pod 的 label 和 container，判断是否需要注入，如果不需要则直接返回允许的响应
-		containerName, need := needInjected(pod, label)
-		if !need || containerInjected(pod, containerName) {
-			c.JSON(http.StatusOK, &admissionv1.AdmissionReview{
-				Response: &admissionv1.AdmissionResponse{
-					UID:     admissionReview.Request.UID,
-					Allowed: true,
-				},
-			})
-			return
-		}
-
-		if container, ok := kv.Get(containerName); ok {
-			response := responsePatch(admissionReview.Request.UID, container)
-			c.JSON(http.StatusOK, &admissionv1.AdmissionReview{
-				Response: response,
-			})
-			return
-		}
-
-		klog.Warningf("container %s not found in cache, cannot inject sidecar", containerName)
-		c.JSON(http.StatusOK, &admissionv1.AdmissionReview{
+func (m *mutateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		responseAdmissionReview(w, http.StatusMethodNotAllowed, nil)
+		return
+	}
+	var admissionReview admissionv1.AdmissionReview
+	if err := json.NewDecoder(r.Body).Decode(&admissionReview); err != nil {
+		responseAdmissionReview(w, http.StatusBadRequest, nil)
+		return
+	}
+	pod, ok := getPodFromAdmissionReview(&admissionReview)
+	if !ok {
+		responseAdmissionReview(w, http.StatusBadRequest, nil)
+		return
+	}
+	containerName, needInject := needInjected(pod, m.label)
+	if !needInject {
+		responseAdmissionReview(w, http.StatusOK, &admissionv1.AdmissionReview{
+			Response: &admissionv1.AdmissionResponse{
+				UID:     admissionReview.Request.UID,
+				Allowed: true,
+			},
+		})
+		return
+	}
+	if containerInjected(pod, containerName) {
+		responseAdmissionReview(w, http.StatusOK, &admissionv1.AdmissionReview{
+			Response: &admissionv1.AdmissionResponse{
+				UID:     admissionReview.Request.UID,
+				Allowed: true,
+			},
+		})
+		return
+	}
+	container, exist := m.kv.Get(containerName)
+	if !exist {
+		responseAdmissionReview(w, http.StatusOK, &admissionv1.AdmissionReview{
 			Response: &admissionv1.AdmissionResponse{
 				UID:     admissionReview.Request.UID,
 				Allowed: false,
 			},
 		})
+		return
+	}
+	responseAdmissionReview(w, http.StatusOK, &admissionv1.AdmissionReview{
+		Response: responsePatch(admissionReview.Request.UID, container),
+	})
+}
+
+func NewMutateHandler(kv *cache.GeneralCache[*corev1.Container], label string) http.Handler {
+	return &mutateHandler{
+		kv:    kv,
+		label: label,
 	}
 }
 
-func (s *WebhookServer) Aggregation(engine *gin.Engine) {
-	// /mutate: 处理 Kubernetes AdmissionReview 请求并返回 sidecar 注入补丁。
-	engine.POST("/mutate", mutateHandler(s.kv, s.label))
-}
+var _ http.Handler = (*mutateHandler)(nil)

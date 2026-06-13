@@ -2,26 +2,24 @@ package ctrl
 
 import (
 	"github.com/BuMaRen/mesh/internal/ctrl/grpcserver"
-	"github.com/BuMaRen/mesh/internal/ctrl/webhook"
-	"github.com/BuMaRen/mesh/pkg/metrics"
 	"github.com/spf13/cobra"
 )
 
 type Options struct {
-	label          string
-	gvrVersion     string
-	gvrGroup       string
-	gvrResource    string
-	grpcOptions    *grpcserver.Options
-	metricsOptions *metrics.Options
-	webhookOptions *webhook.Options
+	label                   string
+	gvrVersion              string
+	gvrGroup                string
+	gvrResource             string
+	grpcOptions             *grpcserver.Options
+	certFile                string
+	keyFile                 string
+	address                 string
+	gracefulShutdownTimeout int
 }
 
 func NewOptions() *Options {
 	return &Options{
-		grpcOptions:    grpcserver.NewOptions(),
-		metricsOptions: metrics.NewMetricsOptions(),
-		webhookOptions: webhook.NewOptions(),
+		grpcOptions: grpcserver.NewOptions(),
 	}
 }
 
@@ -31,19 +29,13 @@ func (o *Options) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.gvrVersion, "gvr-version", "v1", "Version of the GVR to watch")
 	cmd.Flags().StringVar(&o.gvrGroup, "gvr-group", "masha.io", "Group of the GVR to watch")
 	cmd.Flags().StringVar(&o.gvrResource, "gvr-resource", "containers", "Resource of the GVR to watch")
+	cmd.Flags().StringVar(&o.certFile, "cert-file", "", "File containing the certificate for TLS")
+	cmd.Flags().StringVar(&o.keyFile, "key-file", "", "File containing the key for TLS")
+	cmd.Flags().StringVar(&o.address, "address", ":443", "Address to listen on")
+	cmd.Flags().IntVar(&o.gracefulShutdownTimeout, "graceful-shutdown-timeout", 10, "Timeout for graceful shutdown")
 	o.grpcOptions.AddFlags(cmd)
-	o.metricsOptions.AddFlags(cmd)
-	o.webhookOptions.AddFlags(cmd)
 }
 
-func (o *Options) WebhookOptions() *webhook.Options {
-	return o.webhookOptions
-}
-
-func (o *Options) CtrlOptions() *grpcserver.Options {
+func (o *Options) GrpcOptions() *grpcserver.Options {
 	return o.grpcOptions
-}
-
-func (o *Options) MetricsOptions() *metrics.Options {
-	return o.metricsOptions
 }

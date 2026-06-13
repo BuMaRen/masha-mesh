@@ -1,8 +1,6 @@
 package app
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
 )
 
@@ -10,13 +8,9 @@ func NewCommand() *cobra.Command {
 	opts := NewOptions()
 	rootCmd := &cobra.Command{
 		Use:   "mesh-ctrl",
-		Short: "A brief description of your application",
-		Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+		Short: "Mesh Controller is a component of the mesh system responsible for managing and controlling the mesh network.",
+		Long: `Mesh Controller is a component of the mesh system responsible for managing and controlling the mesh network.
+It provides functionalities to monitor, configure, and maintain the mesh network efficiently.`,
 		// Uncomment the following line if your bare application
 		// has an action associated with it:
 		Run: func(cmd *cobra.Command, args []string) {
@@ -24,8 +18,6 @@ to quickly create a Cobra application.`,
 		},
 	}
 	opts.AddFlags(rootCmd)
-	if opts.PodName == "" {
-		opts.PodName = os.Getenv("POD_NAME")
-	}
+	rootCmd.AddCommand(NewShutDownCommand(opts))
 	return rootCmd
 }

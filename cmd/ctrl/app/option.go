@@ -12,8 +12,6 @@ import (
 )
 
 type Options struct {
-	Namespace   string
-	PodName     string
 	ctrlOptions *ctrl.Options
 }
 
@@ -23,9 +21,11 @@ func NewOptions() *Options {
 	}
 }
 
+func (o *Options) CtrlOptions() *ctrl.Options {
+	return o.ctrlOptions
+}
+
 func (o *Options) AddFlags(command *cobra.Command) {
-	command.Flags().StringVar(&o.Namespace, "namespace", "", "The namespace of the pod")
-	command.Flags().StringVar(&o.PodName, "pod-name", "", "The name of the pod")
 	o.ctrlOptions.AddFlags(command)
 }
 

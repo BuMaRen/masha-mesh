@@ -11,6 +11,7 @@ import (
 	"github.com/BuMaRen/mesh/pkg/cache"
 	"github.com/BuMaRen/mesh/pkg/metrics"
 	"github.com/BuMaRen/mesh/pkg/utils"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -18,7 +19,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func StartUp(ctx context.Context, opts *Options) {
+func StartUp(rootContext context.Context, opts *Options) {
+	httpSvr := NewHttpsServer(opts)
 	grpcSvr := grpcserver.NewGrpcServer()
 	distributer := grpcSvr.Distributer()
 
@@ -28,29 +30,25 @@ func StartUp(ctx context.Context, opts *Options) {
 	k8sClient := utils.NewKubernetesClientOrDie()
 	dynamicClient := utils.NewDynamicClientOrDie()
 
-	webhookServer := webhook.NewWebhookServer(containerCache, opts.label)
 	endpointsliceReconciler := rc.NewEndpointSliceReconciler(epsCache, distributer)
 	customResourcesReconciler := rc.NewCustomResourcesReconciler(containerCache, opts.label, k8sClient)
 
+	stopCh := make(chan struct{})
+	ctx, cancel := context.WithCancel(rootContext)
+	defer cancel()
 	wg := sync.WaitGroup{}
 
-	// 启动 metrics 服务器
 	metrics.MustRegister()
+	httpSvr.RegisterHandler("/prometheus", promhttp.Handler())
+	// 处理 preStop 请求，通知 sidecar 进行预停止准备
+	httpSvr.RegisterHandler("/preStop", &preStopHandler{stop: stopCh})
+	// 处理 mutate 请求，进行注入逻辑
+	httpSvr.RegisterHandler("/mutate", webhook.NewMutateHandler(containerCache, opts.label))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := metrics.RunMetricsServer(ctx, opts.MetricsOptions()); err != nil {
-			klog.Errorf("Failed to start metrics server: %v", err)
-		}
-	}()
-
-	// 启动 webhook 服务器，监听自定义资源 container 的变化
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := webhookServer.Run(ctx, opts.WebhookOptions()); err != nil {
-			klog.Errorf("Failed to start webhook server: %v", err)
-		}
+		httpSvr.ServeTLS(ctx, stopCh)
+		cancel() // 关闭 HTTP 服务器后取消上下文，通知其他 goroutine 进行清理和退出
 	}()
 
 	// 监听 endpointSlice，用于路由。依赖 grpc，grpc 启动前 sidecars 为空， publish 无法起到实际作用。
@@ -83,7 +81,7 @@ func StartUp(ctx context.Context, opts *Options) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := grpcSvr.ListenAndServe(ctx, opts.CtrlOptions()); err != nil {
+		if err := grpcSvr.ListenAndServe(ctx, opts.GrpcOptions()); err != nil {
 			klog.Errorf("Failed to start gRPC server: %v", err)
 		}
 	}()
