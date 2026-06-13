@@ -82,7 +82,7 @@ mesh-cli --listen-address :8081 --config /path/to/proxy-config.yaml
 
 ### Configuration File
 
-See [configs/proxy-example.yaml](../../../configs/proxy-example.yaml) for a complete example.
+See [build/cli/configs/proxy-example.yaml](../../../build/cli/configs/proxy-example.yaml) for a complete example.
 
 ```yaml
 http:
