@@ -38,14 +38,19 @@ to quickly create a Cobra application.`,
 			ctx := rootContext()
 			wg := sync.WaitGroup{}
 
-			proxyServer := proxy.NewProxy(meshClient)
+			proxyServer, err := proxy.NewProxy(meshClient, opts.ProxyOptions())
+			if err != nil {
+				klog.Fatalf("failed to create proxy server: %+v", err)
+			}
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				// 启动l4/l7代理服务器
 				// l4 监听 A 端口，l7 监听 B 端口
 				// TODO：l7需要处理回流请求到app，回报直接写入net.Conn
-				proxyServer.Run(ctx, opts.ProxyOptions())
+				if err := proxyServer.Run(ctx, opts.ProxyOptions()); err != nil {
+					klog.Errorf("proxy server run failed with error: %+v", err)
+				}
 			}()
 			wg.Add(1)
 			go func() {

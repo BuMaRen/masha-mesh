@@ -1,0 +1,44 @@
+# Proxy Configuration Example
+#
+# This configuration file controls how the proxy handles different types of traffic:
+# - TCP traffic: Always passed through transparently (not configurable)
+# - gRPC traffic: Always passed through transparently (not configurable)
+# - HTTP/HTTPS traffic: Can be configured for proxying with load balancing
+
+http:
+  # Enable HTTP/HTTPS proxying
+  enabled: true
+
+  # Proxy rules for specific services (by domain name)
+  # Key: service domain name (not IP address)
+  # Value: proxy configuration for that service
+  proxies:
+    # Example: Configure proxying for "my-service" domain
+    my-service:
+      # Enable load balancing across all IPs for this domain
+      # If false, traffic will be passed through directly
+      loadBalance: true
+
+      # Enable circuit breaker for this service
+      # If true, will use the circuit breaker configured via command-line flags
+      useBreaker: true
+
+    # Example: Another service with load balancing but no circuit breaker
+    another-service:
+      loadBalance: true
+      useBreaker: false
+
+    # Example: Service that just passes through (no proxying)
+    passthrough-service:
+      loadBalance: false
+      useBreaker: false
+
+# Notes:
+# 1. IP-based requests (e.g., http://192.168.1.100:8080) are NEVER proxied,
+#    regardless of configuration
+# 2. Domain-based requests (e.g., http://my-service:8080) will be proxied
+#    according to the rules above if a matching rule exists
+# 3. If no matching rule exists for a domain, traffic passes through directly
+# 4. Circuit breaker parameters are configured via command-line flags:
+#    --window-size, --half-open-allowed, --min-request-count,
+#    --failure-rate-threshold, --half-open-max-duration, --open-duration

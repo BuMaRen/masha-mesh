@@ -2,40 +2,56 @@ package proxy
 
 import (
 	"github.com/BuMaRen/mesh/internal/cli/breaker"
-	"github.com/BuMaRen/mesh/internal/cli/proxy/l4"
-	"github.com/BuMaRen/mesh/internal/cli/proxy/l7"
+	"github.com/BuMaRen/mesh/internal/cli/proxyconfig"
 	"github.com/spf13/cobra"
 )
 
 type Options struct {
-	l4Opts      *l4.Options
-	l7Opts      *l7.Options
-	breakerOpts *breaker.Options
+	listenAddress string
+	configFile    string
+	breakerOpts   *breaker.Options
+	config        *proxyconfig.Config
 }
 
 func NewOptions() *Options {
 	return &Options{
-		l4Opts:      l4.NewOptions(),
-		l7Opts:      l7.NewOptions(),
-		breakerOpts: breaker.NewOptions(),
+		listenAddress: ":8081",
+		configFile:    "",
+		breakerOpts:   breaker.NewOptions(),
 	}
 }
 
 func (o *Options) AddFlags(cmd *cobra.Command) {
-	o.l4Opts.AddFlags(cmd)
-	o.l7Opts.AddFlags(cmd)
+	cmd.Flags().StringVar(&o.listenAddress, "listen-address", o.listenAddress, "Proxy listen address")
+	cmd.Flags().StringVar(&o.configFile, "config", o.configFile, "Configuration file path")
 	o.breakerOpts.AddFlags(cmd)
-	o.l7Opts.SetBreakerOpts(o.breakerOpts)
 }
 
-func (o *Options) L4Options() *l4.Options {
-	return o.l4Opts
+func (o *Options) ListenAddress() string {
+	return o.listenAddress
 }
 
-func (o *Options) L7Options() *l7.Options {
-	return o.l7Opts
+func (o *Options) ConfigFile() string {
+	return o.configFile
 }
 
 func (o *Options) BreakerOptions() *breaker.Options {
 	return o.breakerOpts
+}
+
+func (o *Options) Config() *proxyconfig.Config {
+	return o.config
+}
+
+func (o *Options) LoadConfig() error {
+	if o.configFile == "" {
+		o.config = &proxyconfig.Config{}
+		return nil
+	}
+	config, err := proxyconfig.LoadConfig(o.configFile)
+	if err != nil {
+		return err
+	}
+	o.config = config
+	return nil
 }
