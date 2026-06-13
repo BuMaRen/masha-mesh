@@ -151,15 +151,20 @@ func (t *httpTransport) getEndpoints(service string) []string {
 
 func parseHost(host string) (hostname, port string, isService bool) {
 	hostname = host
-	port = ""
+	port = "80"
 
-	if strings.Contains(host, ":") {
-		parts := strings.Split(host, ":")
-		hostname = parts[0]
-		port = parts[1]
+	// Try standard host:port parsing first (handles IPv6 like [::1]:8080)
+	if h, p, err := net.SplitHostPort(host); err == nil {
+		hostname, port = h, p
+	} else if strings.Count(host, ":") == 1 {
+		// Fallback for "name:port" without IPv6 brackets
+		parts := strings.SplitN(host, ":", 2)
+		if len(parts) == 2 && parts[1] != "" {
+			hostname, port = parts[0], parts[1]
+		}
 	}
 
-	// If hostname is an IP, it's not a service
+	hostname = strings.Trim(hostname, "[]")
 	isService = net.ParseIP(hostname) == nil
 	return
 }

@@ -39,20 +39,24 @@ func (l *Listener) Listen(ctx context.Context, address string) error {
 	listener := utils.NewListenerOrDie("tcp", address)
 	defer listener.Close()
 
+	// Ensure Accept unblocks promptly on context cancellation.
+	go func() {
+		<-ctx.Done()
+		_ = listener.Close()
+	}()
+
 	klog.Infof("Proxy listening on %s", address)
 
 	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		default:
-			conn, err := listener.Accept()
-			if err != nil {
-				klog.Errorf("accept connection failed: %+v", err)
-				continue
+		conn, err := listener.Accept()
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
 			}
-			go l.handleConnection(ctx, conn)
+			klog.Errorf("accept connection failed: %+v", err)
+			continue
 		}
+		go l.handleConnection(ctx, conn)
 	}
 }
 
