@@ -188,7 +188,7 @@ func getOriginalDst(conn net.Conn) (*net.TCPAddr, error) {
 	}
 	originalDst := &net.TCPAddr{}
 	var sockerr error
-	rawConn.Control(func(fd uintptr) {
+	if err := rawConn.Control(func(fd uintptr) {
 		addr, err := syscall.GetsockoptIPv6Mreq(int(fd), unix.IPPROTO_IP, unix.SO_ORIGINAL_DST)
 		if err != nil {
 			sockerr = err
@@ -197,9 +197,13 @@ func getOriginalDst(conn net.Conn) (*net.TCPAddr, error) {
 		ip := net.IPv4(addr.Multiaddr[4], addr.Multiaddr[5], addr.Multiaddr[6], addr.Multiaddr[7])
 		port := int(addr.Multiaddr[2])<<8 + int(addr.Multiaddr[3])
 		originalDst = &net.TCPAddr{IP: ip, Port: port}
-	})
-	return originalDst, sockerr
-}
+	}); err != nil {
+		return nil, fmt.Errorf("rawConn.Control: %w", err)
+	}
+	if sockerr != nil {
+		return nil, sockerr
+	}
+	return originalDst, nil
 
 type connWrapper struct {
 	reader *bufio.Reader

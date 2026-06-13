@@ -2,7 +2,7 @@
 
 ## Overview
 
-This proxy module implements a unified listener architecture similar to Envoy, handling all types of traffic (TCP, gRPC, HTTP/HTTPS) through a single entry point. Traffic is automatically detected and routed appropriately.
+This proxy module implements a unified listener architecture similar to Envoy, handling all types of traffic (TCP, gRPC, HTTP) through a single entry point. HTTPS/TLS traffic is treated as opaque TCP pass-through unless a dedicated TLS-aware feature is added.
 
 ## Architecture
 
@@ -54,10 +54,10 @@ The proxy uses a unified listener design inspired by Envoy:
 - **Detection**: Treated as TCP traffic
 - **Configurable**: No
 
-### HTTP/HTTPS Traffic
+### HTTP Traffic
 - **Behavior**: Configurable via YAML
-- **Detection**: Automatic by inspecting first bytes (GET, POST, etc.)
-- **Configurable**: Yes
+- **Detection**: Automatic by inspecting first bytes (GET, POST, etc.). TLS/HTTPS traffic will be treated as TCP traffic.
+- **Configurable**: Yes (HTTP only)
 
 #### HTTP Proxy Rules
 

@@ -50,13 +50,14 @@ func (s *HttpsServer) ServeTLS(ctx context.Context, stopCh chan struct{}) {
 		err := httpSvr.Shutdown(stopCtx)
 		if err != nil {
 			// 如果优雅关闭失败，强制关闭服务器
-			if err := httpSvr.Close(); err != nil {
-				klog.Errorf("Failed to force close HTTPS server, error: %v", err)
+			if closeErr := httpSvr.Close(); closeErr != nil {
+				klog.Errorf("Failed to force close HTTPS server, error: %v", closeErr)
 				return
 			}
+			klog.Errorf("HTTPS server graceful shutdown failed: %v", err)
+			return
 		}
-		klog.Infof("HTTPS server is shutting down: %v", err)
-	}()
+		klog.Info("HTTPS server graceful shutdown completed")
 
 	if err := httpSvr.ServeTLS(listener, s.tlsCertFile, s.tlsKeyFile); err != nil && err != http.ErrServerClosed {
 		klog.Errorf("Failed to start HTTPS server, error: %v", err)

@@ -6,7 +6,7 @@ import (
 )
 
 func NewShutDownCommand(opt *Options) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "shutdown",
 		Short: "Shutdown the mesh controller",
 		Long:  `Shutdown the mesh controller gracefully.`,
@@ -17,4 +17,7 @@ func NewShutDownCommand(opt *Options) *cobra.Command {
 			shutdown.Execute()
 		},
 	}
+	// 子命令需要自己注册 flags（父命令的普通 flags 不会被子命令继承）
+	opt.CtrlOptions().AddFlags(cmd)
+	return cmd
 }

@@ -25,23 +25,23 @@ func (t *httpTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	// IP-based requests always pass through
 	if !isService {
-		return t.passThrough(req, "IP-based request, passing through to %s", req.URL.Host)
+		return t.passThrough(req, "IP-based request, passing through to %s", req.Host)
 	}
 
 	// Check if HTTP proxy is enabled
 	if t.listener.config == nil || !t.listener.config.HTTP.Enabled {
-		return t.passThrough(req, "HTTP proxy disabled, passing through to %s", req.URL.Host)
+		return t.passThrough(req, "HTTP proxy disabled, passing through to %s", req.Host)
 	}
 
 	// Check if service has proxy configuration
 	proxyRule, hasProxyConfig := t.listener.config.HTTP.Proxies[svrHost]
 	if !hasProxyConfig {
-		return t.passThrough(req, "No config for service %s, passing through to %s", svrHost, req.URL.Host)
+		return t.passThrough(req, "No config for service %s, passing through to %s", svrHost, req.Host)
 	}
 
 	// Check if load balancing is enabled
 	if !proxyRule.LoadBalance {
-		return t.passThrough(req, "Load balancing disabled for %s, passing through to %s", svrHost, req.URL.Host)
+		return t.passThrough(req, "Load balancing disabled for %s, passing through to %s", svrHost, req.Host)
 	}
 
 	// Load balance across endpoints

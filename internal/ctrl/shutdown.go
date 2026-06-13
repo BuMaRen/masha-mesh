@@ -77,13 +77,14 @@ func (s *Shutdown) Execute() {
 		klog.Errorf("Failed to append CA cert to cert pool")
 		return
 	}
+	host, _, _ := net.SplitHostPort(address)
 	client := &http.Client{
 		Timeout: s.timeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				MinVersion: tls.VersionTLS12,
 				RootCAs:    rootCAs,
-				ServerName: "localhost",
+				ServerName: host,
 			},
 		},
 	}
