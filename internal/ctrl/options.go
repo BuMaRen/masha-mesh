@@ -52,6 +52,6 @@ func NewShutdownOptions() *ShutdownOptions {
 
 func (o *ShutdownOptions) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.certFile, "cert-file", "", "File containing the certificate for TLS")
-	cmd.Flags().StringVar(&o.address, "address", ":443", "Address to listen on")
+	cmd.Flags().StringVar(&o.address, "address", ":443", "Address that the controller is listening on")
 	cmd.Flags().IntVar(&o.gracefulShutdownTimeout, "graceful-shutdown-timeout", 10, "Timeout for graceful shutdown")
 }
