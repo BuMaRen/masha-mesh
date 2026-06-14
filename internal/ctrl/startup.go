@@ -3,6 +3,7 @@ package ctrl
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/BuMaRen/mesh/internal/ctrl/grpcserver"
 	"github.com/BuMaRen/mesh/internal/ctrl/handlers"
@@ -44,6 +45,13 @@ func StartUp(rootContext context.Context, opts *StartUpOptions) {
 	httpSvr.RegisterHandler("/preStop", handlers.NewPreStopHandler(stopCh))
 	// 处理 mutate 请求，进行注入逻辑
 	httpSvr.RegisterHandler("/mutate", handlers.NewMutateHandler(containerCache, opts.label))
+	// readyz：聚合 gRPC 服务器 + kube-client 的就绪状态供 Kubernetes readinessProbe 调用
+	httpSvr.RegisterHandler("/readyz", handlers.NewReadyzHandler(
+		5*time.Second,
+		handlers.NewGrpcServerChecker(grpcSvr.IsReady),
+		handlers.NewKubeClientChecker(k8sClient),
+		handlers.NewDynamicClientChecker(dynamicClient),
+	))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
