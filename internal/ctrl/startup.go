@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/BuMaRen/mesh/internal/ctrl/grpcserver"
+	"github.com/BuMaRen/mesh/internal/ctrl/handlers"
 	rc "github.com/BuMaRen/mesh/internal/ctrl/reconciler"
-	"github.com/BuMaRen/mesh/internal/ctrl/webhook"
 	"github.com/BuMaRen/mesh/internal/resources"
 	"github.com/BuMaRen/mesh/pkg/cache"
 	"github.com/BuMaRen/mesh/pkg/metrics"
@@ -19,7 +19,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func StartUp(rootContext context.Context, opts *Options) {
+func StartUp(rootContext context.Context, opts *StartUpOptions) {
 	httpSvr := NewHttpsServer(opts)
 	grpcSvr := grpcserver.NewGrpcServer()
 	distributer := grpcSvr.Distributer()
@@ -41,9 +41,9 @@ func StartUp(rootContext context.Context, opts *Options) {
 	metrics.MustRegister()
 	httpSvr.RegisterHandler("/prometheus", promhttp.Handler())
 	// 处理 preStop 请求，通知 sidecar 进行预停止准备
-	httpSvr.RegisterHandler("/preStop", &preStopHandler{stop: stopCh})
+	httpSvr.RegisterHandler("/preStop", handlers.NewPreStopHandler(stopCh))
 	// 处理 mutate 请求，进行注入逻辑
-	httpSvr.RegisterHandler("/mutate", webhook.NewMutateHandler(containerCache, opts.label))
+	httpSvr.RegisterHandler("/mutate", handlers.NewMutateHandler(containerCache, opts.label))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

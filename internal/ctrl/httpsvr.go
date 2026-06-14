@@ -17,7 +17,7 @@ type HttpsServer struct {
 	gracefulShutdownTimeout time.Duration
 }
 
-func NewHttpsServer(opts *Options) *HttpsServer {
+func NewHttpsServer(opts *StartUpOptions) *HttpsServer {
 	return &HttpsServer{
 		mux:                     http.NewServeMux(),
 		tlsCertFile:             opts.certFile,
@@ -58,6 +58,7 @@ func (s *HttpsServer) ServeTLS(ctx context.Context, stopCh chan struct{}) {
 			return
 		}
 		klog.Info("HTTPS server graceful shutdown completed")
+	}()
 
 	if err := httpSvr.ServeTLS(listener, s.tlsCertFile, s.tlsKeyFile); err != nil && err != http.ErrServerClosed {
 		klog.Errorf("Failed to start HTTPS server, error: %v", err)

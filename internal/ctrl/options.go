@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type Options struct {
+type StartUpOptions struct {
 	label                   string
 	gvrVersion              string
 	gvrGroup                string
@@ -17,13 +17,13 @@ type Options struct {
 	gracefulShutdownTimeout int
 }
 
-func NewOptions() *Options {
-	return &Options{
+func NewStartUpOptions() *StartUpOptions {
+	return &StartUpOptions{
 		grpcOptions: grpcserver.NewOptions(),
 	}
 }
 
-func (o *Options) AddFlags(cmd *cobra.Command) {
+func (o *StartUpOptions) AddFlags(cmd *cobra.Command) {
 	// label 指定 pod 中的 label key，其值用于确定需要注入的容器名称
 	cmd.Flags().StringVar(&o.label, "label", "masha.io/injection", "Label to select workloads for injection")
 	cmd.Flags().StringVar(&o.gvrVersion, "gvr-version", "v1", "Version of the GVR to watch")
@@ -36,6 +36,22 @@ func (o *Options) AddFlags(cmd *cobra.Command) {
 	o.grpcOptions.AddFlags(cmd)
 }
 
-func (o *Options) GrpcOptions() *grpcserver.Options {
+func (o *StartUpOptions) GrpcOptions() *grpcserver.Options {
 	return o.grpcOptions
+}
+
+type ShutdownOptions struct {
+	certFile                string
+	address                 string
+	gracefulShutdownTimeout int
+}
+
+func NewShutdownOptions() *ShutdownOptions {
+	return &ShutdownOptions{}
+}
+
+func (o *ShutdownOptions) AddFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&o.certFile, "cert-file", "", "File containing the certificate for TLS")
+	cmd.Flags().StringVar(&o.address, "address", ":443", "Address to listen on")
+	cmd.Flags().IntVar(&o.gracefulShutdownTimeout, "graceful-shutdown-timeout", 10, "Timeout for graceful shutdown")
 }
