@@ -6,44 +6,10 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	"k8s.io/klog/v2"
 )
-
-type preStopHandler struct {
-	stop chan struct{}
-	once sync.Once
-}
-
-func (h *preStopHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	// 防止处理慢、多个请求导致多次调用 Execute，使用 sync.Once 确保只执行一次
-	h.once.Do(func() {
-		close(h.stop)
-	})
-}
-
-var _ http.Handler = (*preStopHandler)(nil)
-
-type Shutdown struct {
-	address  string
-	certFile string
-	timeout  time.Duration
-}
-
-func NewShutdown(opt *Options) *Shutdown {
-	return &Shutdown{
-		address:  opt.address,
-		certFile: opt.certFile,
-		timeout:  time.Duration(opt.gracefulShutdownTimeout) * time.Second,
-	}
-}
 
 func addressValidate(address string) (string, bool) {
 	// 判断地址是否合法，":port" 的情况补全 localhost，必须包含端口号
@@ -60,14 +26,14 @@ func addressValidate(address string) (string, bool) {
 	return net.JoinHostPort(host, port), true
 }
 
-func (s *Shutdown) Execute() {
-	address, valid := addressValidate(s.address)
+func Shutdown(opt *ShutdownOptions) {
+	address, valid := addressValidate(opt.address)
 	if !valid {
-		klog.Errorf("Invalid address: %s", s.address)
+		klog.Errorf("Invalid address: %s", opt.address)
 		return
 	}
 
-	caPem, err := os.ReadFile(s.certFile)
+	caPem, err := os.ReadFile(opt.certFile)
 	if err != nil {
 		klog.Errorf("Failed to read CA cert: %v", err)
 		return
@@ -79,7 +45,7 @@ func (s *Shutdown) Execute() {
 	}
 	host, _, _ := net.SplitHostPort(address)
 	client := &http.Client{
-		Timeout: s.timeout,
+		Timeout: time.Duration(opt.gracefulShutdownTimeout) * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				MinVersion: tls.VersionTLS12,

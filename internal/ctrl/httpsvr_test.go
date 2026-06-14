@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/BuMaRen/mesh/internal/ctrl/handlers"
 )
 
 func TestHttpsServer(t *testing.T) {
@@ -22,7 +24,7 @@ func TestHttpsServer(t *testing.T) {
 		certFile := filepath.Join(repoRoot, "build", "certs", "tls.crt")
 		keyFile := filepath.Join(repoRoot, "build", "certs", "tls.key")
 
-		opts := &Options{
+		opts := &StartUpOptions{
 			certFile:                certFile,
 			keyFile:                 keyFile,
 			address:                 "localhost:8443",
@@ -40,7 +42,7 @@ func TestHttpsServer(t *testing.T) {
 
 		stopCh := make(chan struct{})
 		httpSvr := NewHttpsServer(opts)
-		httpSvr.RegisterHandler("/preStop", &preStopHandler{stop: stopCh})
+		httpSvr.RegisterHandler("/preStop", handlers.NewPreStopHandler(stopCh))
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()

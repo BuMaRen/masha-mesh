@@ -6,35 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/BuMaRen/mesh/internal/ctrl"
-	"github.com/spf13/cobra"
 	"k8s.io/klog/v2"
 )
-
-type Options struct {
-	ctrlOptions *ctrl.Options
-}
-
-func NewOptions() *Options {
-	return &Options{
-		ctrlOptions: ctrl.NewOptions(),
-	}
-}
-
-func (o *Options) CtrlOptions() *ctrl.Options {
-	return o.ctrlOptions
-}
-
-func (o *Options) AddFlags(command *cobra.Command) {
-	o.ctrlOptions.AddFlags(command)
-}
-
-func (o *Options) Run() {
-	rootContext := WithSignalCatch(context.Background())
-	workingContext, cancel := context.WithCancel(rootContext)
-	defer cancel()
-	ctrl.StartUp(workingContext, o.ctrlOptions)
-}
 
 func WithSignalCatch(root context.Context) context.Context {
 	ctx, cancel := context.WithCancel(root)

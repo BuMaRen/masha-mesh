@@ -204,6 +204,7 @@ func getOriginalDst(conn net.Conn) (*net.TCPAddr, error) {
 		return nil, sockerr
 	}
 	return originalDst, nil
+}
 
 type connWrapper struct {
 	reader *bufio.Reader
