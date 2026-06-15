@@ -61,7 +61,8 @@ func (h *ReadyzHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // ---- 内置 checker 实现 ----
 
-// KubeClientChecker 通过探测 API Server 的 /readyz 端点来判断 kube-client 是否可用
+// KubeClientChecker 通过执行一个 controller 已具备 RBAC 权限的轻量 API 请求来判断 kube-client 是否可用
+// （避免调用 apiserver 的非资源 URL，例如 /readyz，导致在默认 RBAC 下 403）
 type KubeClientChecker struct {
 	client kubernetes.Interface
 }
@@ -73,9 +74,7 @@ func NewKubeClientChecker(client kubernetes.Interface) ReadinessChecker {
 func (c *KubeClientChecker) Name() string { return "kube-client" }
 
 func (c *KubeClientChecker) Check(ctx context.Context) error {
-	_, err := c.client.Discovery().RESTClient().Get().
-		AbsPath("/readyz").
-		DoRaw(ctx)
+	_, err := c.client.DiscoveryV1().EndpointSlices(metav1.NamespaceAll).List(ctx, metav1.ListOptions{Limit: 1})
 	return err
 }
 
