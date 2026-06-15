@@ -3,6 +3,7 @@ package grpcserver
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/BuMaRen/mesh/internal/ctrl/utils"
 	"github.com/BuMaRen/mesh/pkg/api/mesh"
@@ -22,6 +23,7 @@ type GrpcServer struct {
 	listFn   func(string) (*discoveryv1.EndpointSlice, bool)
 	sidecars map[string]*utils.Sidecar
 	mtx      *sync.RWMutex
+	ready    atomic.Bool
 	mesh.UnimplementedMeshCtrlServer
 }
 
@@ -76,6 +78,11 @@ func (s *GrpcServer) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStre
 	return nil
 }
 
+// IsReady 返回 gRPC 服务器是否已开始监听，供就绪检查使用
+func (s *GrpcServer) IsReady() bool {
+	return s.ready.Load()
+}
+
 func (s *GrpcServer) ListenAndServe(ctx context.Context, opts *Options) error {
 	network := opts.network
 	address := opts.address
@@ -91,6 +98,9 @@ func (s *GrpcServer) ListenAndServe(ctx context.Context, opts *Options) error {
 		grpcServer.GracefulStop()
 	}()
 
+	// listener 绑定成功后标记就绪，此时已可接受连接
+	s.ready.Store(true)
+	defer s.ready.Store(false)
 	return grpcServer.Serve(listener)
 }
 
