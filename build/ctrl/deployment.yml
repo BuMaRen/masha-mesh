@@ -45,6 +45,7 @@ spec:
       labels:
         app: mesh-ctrl
     spec:
+      terminationGracePeriodSeconds: 30
       serviceAccountName: mesh-ctrl
       containers:
       - name: mesh-ctrl
