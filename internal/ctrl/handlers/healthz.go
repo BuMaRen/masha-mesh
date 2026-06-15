@@ -39,7 +39,7 @@ func (h *HealthzHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var failures []string
 	for _, c := range h.checkers {
 		if err := c.Check(ctx); err != nil {
-			klog.Warningf("[healthz] checker %q not healthy: %v", c.Name(), err)
+			klog.V(2).Infof("[healthz] checker %q not healthy: %v", c.Name(), err)
 			failures = append(failures, fmt.Sprintf("%s: %v", c.Name(), err))
 		}
 	}
@@ -65,6 +65,5 @@ func NewDefaultHealthChecker(name string) LivenessChecker {
 func (c *DefaultHealthChecker) Name() string { return c.name }
 
 func (c *DefaultHealthChecker) Check(_ context.Context) error {
-	// Implement default health check logic here
 	return nil
 }

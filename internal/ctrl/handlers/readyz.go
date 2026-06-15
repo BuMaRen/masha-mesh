@@ -44,7 +44,7 @@ func (h *ReadyzHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var failures []string
 	for _, c := range h.checkers {
 		if err := c.Check(ctx); err != nil {
-			klog.Warningf("[readyz] checker %q not ready: %v", c.Name(), err)
+			klog.V(2).Infof("[readyz] checker %q not ready: %v", c.Name(), err)
 			failures = append(failures, fmt.Sprintf("%s: %v", c.Name(), err))
 		}
 	}
