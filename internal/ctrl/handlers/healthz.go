@@ -64,7 +64,7 @@ func NewDefaultHealthChecker(name string) LivenessChecker {
 
 func (c *DefaultHealthChecker) Name() string { return c.name }
 
-func (c *DefaultHealthChecker) Check(ctx context.Context) error {
+func (c *DefaultHealthChecker) Check(_ context.Context) error {
 	// Implement default health check logic here
 	return nil
 }

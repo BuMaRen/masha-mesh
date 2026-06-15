@@ -81,17 +81,17 @@ func (c *KubeClientChecker) Check(ctx context.Context) error {
 
 type DynamicClientChecker struct {
 	client dynamic.Interface
+	gvr    schema.GroupVersionResource
 }
 
-func NewDynamicClientChecker(client dynamic.Interface) ReadinessChecker {
-	return &DynamicClientChecker{client: client}
+func NewDynamicClientChecker(client dynamic.Interface, gvr schema.GroupVersionResource) ReadinessChecker {
+	return &DynamicClientChecker{client: client, gvr: gvr}
 }
 
 func (c *DynamicClientChecker) Name() string { return "dynamic-client" }
 
 func (c *DynamicClientChecker) Check(ctx context.Context) error {
-	// 检查 dynamic client 是否能成功列出某个核心资源（如 pods），以验证其基本功能
-	_, err := c.client.Resource(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}).
+	_, err := c.client.Resource(c.gvr).
 		List(ctx, metav1.ListOptions{Limit: 1})
 	return err
 }

@@ -50,7 +50,11 @@ func StartUp(rootContext context.Context, opts *StartUpOptions) {
 		5*time.Second,
 		handlers.NewGrpcServerChecker(grpcSvr.IsReady),
 		handlers.NewKubeClientChecker(k8sClient),
-		handlers.NewDynamicClientChecker(dynamicClient),
+		handlers.NewDynamicClientChecker(dynamicClient, schema.GroupVersionResource{
+			Group:    opts.gvrGroup,
+			Version:  opts.gvrVersion,
+			Resource: opts.gvrResource,
+		}),
 	))
 	httpSvr.RegisterHandler("/healthz", handlers.NewHealthzHandler(
 		5*time.Second,
