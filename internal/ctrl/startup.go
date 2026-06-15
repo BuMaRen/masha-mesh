@@ -52,6 +52,10 @@ func StartUp(rootContext context.Context, opts *StartUpOptions) {
 		handlers.NewKubeClientChecker(k8sClient),
 		handlers.NewDynamicClientChecker(dynamicClient),
 	))
+	httpSvr.RegisterHandler("/healthz", handlers.NewHealthzHandler(
+		5*time.Second,
+		handlers.NewDefaultHealthChecker("default-healthz"),
+	))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

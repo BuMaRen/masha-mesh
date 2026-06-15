@@ -67,6 +67,16 @@ spec:
           preStop:
             exec:
               command: ["/app/mesh-ctrl", "shutdown", "--address", ":443", "--cert-file", "/etc/webhook/certs/tls.crt"]
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 443
+            scheme: HTTPS
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 443
+            scheme: HTTPS
         env:
         - name: POD_NAME
           valueFrom:
