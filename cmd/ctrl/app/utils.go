@@ -15,12 +15,11 @@ func WithSignalCatch(root context.Context) context.Context {
 	signal.Reset(syscall.SIGTERM, syscall.SIGINT)
 	signal.Notify(ch, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
-		// Listen for OS signals and call cancel() when received
 		<-ch
-		klog.Infof("Received shutdown signal, initiating graceful shutdown...")
+		klog.Warning("[Signal] graceful shutdown in progress...")
 		cancel()
 		<-ch
-		klog.Infof("Received second shutdown signal, forcing exit...")
+		klog.Warning("[Signal] received second shutdown signal, forcing exit...")
 		os.Exit(1)
 	}()
 	return ctx

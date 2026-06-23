@@ -44,12 +44,12 @@ func (s *GrpcServer) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStre
 	serviceName := sr.ServiceName
 	sidecar := utils.NewSidecar(sr.SidecarId, serviceName)
 
-	klog.Infof("[GrpcServer][Subscribe] Sidecar %s subscribed to service %s\n", sr.SidecarId, serviceName)
+	klog.Infof("[GrpcServer][Subscribe] sidecar %s subscribed to service %s", sr.SidecarId, serviceName)
 
 	// 订阅时先把当前的 EndpointSlice 发给 sidecar，确保 sidecar 能尽快拿到数据
 	es, exist := s.listFn(serviceName)
 	if exist {
-		klog.Infof("[GrpcServer][Subscribe] Sending current EndpointSlice for service %s to sidecar %s\n", serviceName, sr.SidecarId)
+		klog.Infof("[GrpcServer][Subscribe] sending current EndpointSlice for service %s to sidecar %s", serviceName, sr.SidecarId)
 		sidecar.Informer(mesh.OpType_ADDED, es)
 	}
 
@@ -64,16 +64,16 @@ func (s *GrpcServer) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStre
 		s.mtx.Lock()
 		delete(s.sidecars, sr.SidecarId)
 		s.mtx.Unlock()
-		klog.Infof("[GrpcServer][Subscribe] Sidecar %s unsubscribed from service %s\n", sr.SidecarId, serviceName)
+		klog.Infof("[GrpcServer][Subscribe] sidecar %s unsubscribed from service %s", sr.SidecarId, serviceName)
 	}()
 
 	receiver := sidecar.Receiver()
 	for event := range receiver {
 		if err := sss.Send(event); err != nil {
-			klog.Errorf("[GrpcServer][Subscribe] Failed to send event to sidecar %s for service %s: %v\n", sr.SidecarId, serviceName, err)
+			klog.Errorf("[GrpcServer][Subscribe] failed to send event to sidecar %s for service %s: %v", sr.SidecarId, serviceName, err)
 			return err
 		}
-		klog.Infof("[GrpcServer][Subscribe] Sent event to sidecar %s for service %s: %+v\n", sr.SidecarId, serviceName, event)
+		klog.V(4).Infof("[GrpcServer][Subscribe] sent event to sidecar %s for service %s: %+v", sr.SidecarId, serviceName, event)
 	}
 	return nil
 }

@@ -45,7 +45,7 @@ func (l *Listener) Listen(ctx context.Context, address string) error {
 		_ = listener.Close()
 	}()
 
-	klog.Infof("Proxy listening on %s", address)
+	klog.Infof("[Proxy] listening on %s", address)
 
 	for {
 		conn, err := listener.Accept()
@@ -53,7 +53,7 @@ func (l *Listener) Listen(ctx context.Context, address string) error {
 			if ctx.Err() != nil {
 				return nil
 			}
-			klog.Errorf("accept connection failed: %+v", err)
+			klog.Errorf("[Proxy] accept connection failed: %+v", err)
 			continue
 		}
 		go l.handleConnection(ctx, conn)
@@ -73,7 +73,7 @@ func (l *Listener) handleConnection(ctx context.Context, conn net.Conn) {
 }
 
 func (l *Listener) handleHTTP(_ context.Context, conn net.Conn, reader *bufio.Reader) {
-	klog.V(4).Info("Handling HTTP connection")
+	klog.V(4).Info("[Proxy] handling HTTP connection")
 
 	proxy := &httputil.ReverseProxy{
 		Transport: &httpTransport{
@@ -81,7 +81,7 @@ func (l *Listener) handleHTTP(_ context.Context, conn net.Conn, reader *bufio.Re
 		},
 		Director: func(req *http.Request) {},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			klog.Errorf("HTTP proxy error: %v", err)
+			klog.Errorf("[Proxy] HTTP proxy error: %v", err)
 			http.Error(w, "Bad Gateway", http.StatusBadGateway)
 		},
 	}
@@ -98,17 +98,17 @@ func (l *Listener) handleHTTP(_ context.Context, conn net.Conn, reader *bufio.Re
 }
 
 func (l *Listener) handleTCP(ctx context.Context, conn net.Conn, reader *bufio.Reader) {
-	klog.V(4).Info("Handling TCP connection")
+	klog.V(4).Info("[Proxy] handling TCP connection")
 
 	originalDst, err := getOriginalDst(conn)
 	if err != nil {
-		klog.Errorf("get original destination failed: %+v", err)
+		klog.Errorf("[Proxy] get original destination failed: %+v", err)
 		return
 	}
 
 	targetConn, err := net.Dial("tcp", originalDst.String())
 	if err != nil {
-		klog.Errorf("dial to target %s failed: %+v", originalDst.String(), err)
+		klog.Errorf("[Proxy] dial to target %s failed: %+v", originalDst.String(), err)
 		return
 	}
 	defer targetConn.Close()
@@ -138,7 +138,7 @@ func (l *Listener) handleTCP(ctx context.Context, conn net.Conn, reader *bufio.R
 	go func() {
 		defer wg.Done()
 		if _, err := io.Copy(targetConn, wrappedConn); err != nil {
-			klog.V(4).Infof("copy from client to target failed: %+v", err)
+			klog.V(4).Infof("[Proxy] copy from client to target failed: %+v", err)
 		}
 		if tcpConn, ok := targetConn.(*net.TCPConn); ok {
 			tcpConn.CloseWrite()

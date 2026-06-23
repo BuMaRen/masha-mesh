@@ -14,13 +14,13 @@ import (
 // getPodFromAdmissionReview 的入参 admissionReview 提前检查有效性
 func getPodFromAdmissionReview(admissionReview *admissionv1.AdmissionReview) (*corev1.Pod, bool) {
 	if admissionReview == nil || admissionReview.Request == nil {
-		klog.Warningf("invalid admissionReview: %v", admissionReview)
+		klog.Warningf("[Webhook] invalid admissionReview: %v", admissionReview)
 		return nil, false
 	}
 	admissionRequest := admissionReview.Request
 	pod := corev1.Pod{}
 	if err := json.Unmarshal(admissionRequest.Object.Raw, &pod); err != nil {
-		klog.Warningf("failed to unmarshal admissionRequest.Object.Raw to pod, error: %v, admissionRequest: %v", err, admissionRequest)
+		klog.Warningf("[Webhook] failed to unmarshal admissionRequest.Object.Raw to pod, error: %v, admissionRequest: %v", err, admissionRequest)
 		return nil, false
 	}
 	return &pod, true

@@ -98,7 +98,7 @@ func StartUp(rootContext context.Context, opts *StartUpOptions) {
 	go func() {
 		defer wg.Done()
 		if err := grpcSvr.ListenAndServe(ctx, opts.GrpcOptions()); err != nil {
-			klog.Errorf("Failed to start gRPC server: %v", err)
+			klog.Errorf("[GrpcServer] failed to start: %v", err)
 		}
 	}()
 

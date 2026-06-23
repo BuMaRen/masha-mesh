@@ -62,19 +62,19 @@ func (r *CustomResourcesReconciler) listStatefulSets(nameSpace string) (*appsv1.
 func (r *CustomResourcesReconciler) OnAdded(obj any) {
 	customContainer := resources.ParseContainer(obj)
 	if customContainer == nil {
-		klog.Warningf("added object is not a valid container, skipping: %v", obj)
+		klog.Warningf("[Reconciler] added object is not a valid container, skipping: %v", obj)
 		return
 	}
 	coreContainer := customContainer.ToCoreV1Container()
 	_, ok := r.kv.Add(coreContainer.Name, &coreContainer)
-	klog.Infof("container %s added to cache, exist before: %v", coreContainer.Name, !ok)
+	klog.Infof("[Reconciler] container %s added to cache, already existed: %v", coreContainer.Name, !ok)
 }
 
 // TODO：如何面对 containerName 变化的情况？极低价值
 func (r *CustomResourcesReconciler) OnUpdated(oldObj, newObj any) {
 	newContainer := resources.ParseContainer(newObj)
 	if newContainer == nil {
-		klog.Errorf("updated object is not a valid container, skipping: %v", newObj)
+		klog.Warningf("[Reconciler] updated object is not a valid container, skipping: %v", newObj)
 		return
 	}
 	coreContainer := newContainer.ToCoreV1Container()
@@ -88,7 +88,7 @@ func (r *CustomResourcesReconciler) OnUpdated(oldObj, newObj any) {
 		for _, dep := range deployments.Items {
 			newDeploy := deployWithContainerUpdated(&dep, coreContainer)
 			if err := updateDeployment(r.kubeClient, newDeploy); err != nil {
-				klog.Errorf("update deployment %s/%s failed: %v", dep.Namespace, dep.Name, err)
+				klog.Errorf("[Reconciler] update deployment %s/%s failed: %v", dep.Namespace, dep.Name, err)
 			}
 		}
 	}
@@ -98,7 +98,7 @@ func (r *CustomResourcesReconciler) OnUpdated(oldObj, newObj any) {
 		for _, sts := range statefulSets.Items {
 			newSts := statefulsetWithContainerUpdated(&sts, coreContainer)
 			if err := updateStatefulSet(r.kubeClient, newSts); err != nil {
-				klog.Errorf("update statefulset %s/%s failed: %v", sts.Namespace, sts.Name, err)
+				klog.Errorf("[Reconciler] update statefulset %s/%s failed: %v", sts.Namespace, sts.Name, err)
 			}
 		}
 	}
@@ -107,7 +107,7 @@ func (r *CustomResourcesReconciler) OnUpdated(oldObj, newObj any) {
 func (r *CustomResourcesReconciler) OnDeleted(obj any) {
 	container := resources.ParseContainer(obj)
 	if container == nil {
-		klog.Errorf("deleted object is not a valid container, skipping: %v", obj)
+		klog.Warningf("[Reconciler] deleted object is not a valid container, skipping: %v", obj)
 		return
 	}
 	coreContainer := container.ToCoreV1Container()
@@ -122,7 +122,7 @@ func (r *CustomResourcesReconciler) OnDeleted(obj any) {
 		for _, dep := range deployments.Items {
 			newDeploy := deployWithContainerRemoved(&dep, containerName)
 			if err := updateDeployment(r.kubeClient, newDeploy); err != nil {
-				klog.Errorf("update deployment %s/%s failed while removing container %q: %v", dep.Namespace, dep.Name, containerName, err)
+				klog.Errorf("[Reconciler] update deployment %s/%s failed while removing container %q: %v", dep.Namespace, dep.Name, containerName, err)
 			}
 		}
 	}
@@ -132,7 +132,7 @@ func (r *CustomResourcesReconciler) OnDeleted(obj any) {
 		for _, sts := range statefulSets.Items {
 			newSts := statefulsetWithContainerRemoved(&sts, containerName)
 			if err := updateStatefulSet(r.kubeClient, newSts); err != nil {
-				klog.Errorf("update statefulset %s/%s failed while removing container %q: %v", sts.Namespace, sts.Name, containerName, err)
+				klog.Errorf("[Reconciler] update statefulset %s/%s failed while removing container %q: %v", sts.Namespace, sts.Name, containerName, err)
 			}
 		}
 	}

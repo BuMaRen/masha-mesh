@@ -18,7 +18,7 @@ func containersWithOneRemoved(containers []corev1.Container, containerName strin
 
 func deployWithContainerRemoved(deploy *appsv1.Deployment, containerName string) *appsv1.Deployment {
 	if deploy == nil {
-		klog.Warningf("deploy is nil, cannot remove container %s", containerName)
+		klog.Warningf("[Reconciler] deploy is nil, cannot remove container %s", containerName)
 		return &appsv1.Deployment{}
 	}
 	spec := &deploy.Spec.Template.Spec
@@ -29,7 +29,7 @@ func deployWithContainerRemoved(deploy *appsv1.Deployment, containerName string)
 
 func statefulsetWithContainerRemoved(sts *appsv1.StatefulSet, containerName string) *appsv1.StatefulSet {
 	if sts == nil {
-		klog.Warningf("statefulset is nil, cannot remove container %s", containerName)
+		klog.Warningf("[Reconciler] statefulset is nil, cannot remove container %s", containerName)
 		return &appsv1.StatefulSet{}
 	}
 	spec := &sts.Spec.Template.Spec

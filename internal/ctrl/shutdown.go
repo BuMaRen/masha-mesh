@@ -29,18 +29,18 @@ func addressValidate(address string) (string, bool) {
 func Shutdown(opt *ShutdownOptions) {
 	address, valid := addressValidate(opt.address)
 	if !valid {
-		klog.Errorf("Invalid address: %s", opt.address)
+		klog.Errorf("[Shutdown] invalid address: %s", opt.address)
 		return
 	}
 
 	caPem, err := os.ReadFile(opt.certFile)
 	if err != nil {
-		klog.Errorf("Failed to read CA cert: %v", err)
+		klog.Errorf("[Shutdown] failed to read CA cert: %v", err)
 		return
 	}
 	rootCAs := x509.NewCertPool()
 	if !rootCAs.AppendCertsFromPEM(caPem) {
-		klog.Errorf("Failed to append CA cert to cert pool")
+		klog.Errorf("[Shutdown] failed to append CA cert to cert pool")
 		return
 	}
 	host, _, _ := net.SplitHostPort(address)
@@ -57,13 +57,13 @@ func Shutdown(opt *ShutdownOptions) {
 
 	resp, err := client.Post("https://"+address+"/preStop", "application/json", nil)
 	if err != nil {
-		klog.Errorf("Failed to send preStop request: %v", err)
+		klog.Errorf("[Shutdown] failed to send preStop request: %v", err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		klog.Errorf("Expected status code 200, got %d", resp.StatusCode)
+		klog.Errorf("[Shutdown] expected status code 200, got %d", resp.StatusCode)
 		return
 	}
 }

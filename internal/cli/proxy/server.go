@@ -30,6 +30,6 @@ func NewProxy(meshClient *rpcclient.MeshClient, opts *Options) (*Proxy, error) {
 }
 
 func (p *Proxy) Run(ctx context.Context, opts *Options) error {
-	klog.Infof("Starting proxy on %s", opts.ListenAddress())
+	klog.Infof("[Proxy] starting on %s", opts.ListenAddress())
 	return p.listener.Listen(ctx, opts.ListenAddress())
 }
