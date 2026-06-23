@@ -41,9 +41,9 @@ func (s *HttpsServer) ServeTLS(ctx context.Context, stopCh chan struct{}) {
 	go func() {
 		select {
 		case <-ctx.Done(): // 监听到上下文取消信号，开始优雅关闭服务器
-			klog.Info("context canceled, shutting down HTTPS server...")
+			klog.Info("[HttpsServer] context canceled, shutting down...")
 		case <-stopCh: // 监听到外部停止信号，开始优雅关闭服务器
-			klog.Info("stop signal received, shutting down HTTPS server...")
+			klog.Info("[HttpsServer] stop signal received, shutting down...")
 		}
 		stopCtx, cancel := context.WithTimeout(context.Background(), s.gracefulShutdownTimeout)
 		defer cancel()
@@ -51,17 +51,17 @@ func (s *HttpsServer) ServeTLS(ctx context.Context, stopCh chan struct{}) {
 		if err != nil {
 			// 如果优雅关闭失败，强制关闭服务器
 			if closeErr := httpSvr.Close(); closeErr != nil {
-				klog.Errorf("Failed to force close HTTPS server, error: %v", closeErr)
+				klog.Errorf("[HttpsServer] failed to force close: %v", closeErr)
 				return
 			}
-			klog.Errorf("HTTPS server graceful shutdown failed: %v", err)
+			klog.Errorf("[HttpsServer] graceful shutdown failed: %v", err)
 			return
 		}
-		klog.Info("HTTPS server graceful shutdown completed")
+		klog.Info("[HttpsServer] graceful shutdown completed")
 	}()
 
 	if err := httpSvr.ServeTLS(listener, s.tlsCertFile, s.tlsKeyFile); err != nil && err != http.ErrServerClosed {
-		klog.Errorf("Failed to start HTTPS server, error: %v", err)
+		klog.Errorf("[HttpsServer] failed to start: %v", err)
 	}
-	klog.Info("HTTPS server stopped")
+	klog.Info("[HttpsServer] stopped")
 }

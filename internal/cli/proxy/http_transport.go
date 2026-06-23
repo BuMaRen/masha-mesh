@@ -20,7 +20,7 @@ type httpTransport struct {
 
 func (t *httpTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	svrHost, svrPort, isService := parseHost(req.Host)
-	klog.Infof("Proxy: Received request for host: %s (service: %s, port: %s, isService: %v)",
+	klog.V(4).Infof("[Proxy] received request for host: %s (service: %s, port: %s, isService: %v)",
 		req.Host, svrHost, svrPort, isService)
 
 	// IP-based requests always pass through
@@ -53,7 +53,7 @@ func (t *httpTransport) passThrough(req *http.Request, logFormat string, args ..
 	if req.URL.Host == "" {
 		req.URL.Host = req.Host
 	}
-	klog.Infof("Proxy: "+logFormat, args...)
+	klog.V(4).Infof("[Proxy] "+logFormat, args...)
 	return http.DefaultTransport.RoundTrip(req)
 }
 
@@ -64,18 +64,18 @@ func (t *httpTransport) loadBalance(req *http.Request, service, port string, rul
 	}
 
 	endpoints := t.getEndpoints(service)
-	klog.Infof("Proxy: Load balancing across %d endpoints for service %s", len(endpoints), service)
+	klog.V(4).Infof("[Proxy] load balancing across %d endpoints for service %s", len(endpoints), service)
 
 	for _, endpoint := range endpoints {
 		// Check circuit breaker
 		if rule.UseBreaker && t.listener.breaker != nil {
 			if !t.listener.breaker.Allowed(endpoint) {
-				klog.Warningf("Proxy: Endpoint %s circuit broken, skipping", endpoint)
+				klog.Warningf("[Proxy] endpoint %s circuit broken, skipping", endpoint)
 				continue
 			}
 		}
 
-		klog.Infof("Proxy: Trying endpoint %s:%s", endpoint, port)
+		klog.V(4).Infof("[Proxy] trying endpoint %s:%s", endpoint, port)
 		resp, err := t.sendRequest(req, body, endpoint, port)
 
 		// Record result in circuit breaker
@@ -91,7 +91,7 @@ func (t *httpTransport) loadBalance(req *http.Request, service, port string, rul
 			continue
 		}
 
-		klog.Infof("Proxy: Successfully proxied to %s:%s", endpoint, port)
+		klog.V(4).Infof("[Proxy] successfully proxied to %s:%s", endpoint, port)
 		return resp, nil
 	}
 
@@ -111,7 +111,7 @@ func (t *httpTransport) sendRequest(req *http.Request, body []byte, ip, port str
 
 	resp, err := http.DefaultClient.Do(reqCopy)
 	if err != nil {
-		klog.V(4).Infof("request to %s failed: %v", reqCopy.Host, err)
+		klog.V(4).Infof("[Proxy] request to %s failed: %v", reqCopy.Host, err)
 		return nil, err
 	}
 
@@ -128,13 +128,13 @@ func (t *httpTransport) recordFailure(endpoint string, err error) {
 	errStr := err.Error()
 	if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "deadline exceeded") {
 		t.listener.breaker.RecordTimeout(endpoint)
-		klog.Warningf("Proxy: Timeout for %s", endpoint)
+		klog.Warningf("[Proxy] timeout for endpoint %s", endpoint)
 	} else if strings.Contains(errStr, "connection refused") || strings.Contains(errStr, "network") {
 		t.listener.breaker.RecordNetworkFailure(endpoint)
-		klog.Warningf("Proxy: Network failure for %s", endpoint)
+		klog.Warningf("[Proxy] network failure for endpoint %s", endpoint)
 	} else {
 		t.listener.breaker.RecordBusinessFailure(endpoint)
-		klog.Warningf("Proxy: Business failure for %s", endpoint)
+		klog.Warningf("[Proxy] business failure for endpoint %s", endpoint)
 	}
 }
 

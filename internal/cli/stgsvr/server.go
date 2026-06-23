@@ -29,9 +29,9 @@ func (s *Server) Run(ctx context.Context, opts *Options) error {
 	listener := utils.NewListenerOrDie("tcp", opts.stgSvrAddress)
 	go func() {
 		<-ctx.Done()
-		klog.Info("Shutting down HTTP server...")
+		klog.Info("[StgSvr] shutting down HTTP server...")
 		if err := listener.Close(); err != nil {
-			klog.Errorf("Failed to close listener: %v\n", err)
+			klog.Errorf("[StgSvr] failed to close listener: %v", err)
 			return
 		}
 	}()

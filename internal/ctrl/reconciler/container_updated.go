@@ -24,7 +24,7 @@ func containersWithOneUpdated(containers []corev1.Container, newContainer corev1
 
 func deployWithContainerUpdated(deploy *appsv1.Deployment, newContainer corev1.Container) *appsv1.Deployment {
 	if deploy == nil {
-		klog.Warningf("deploy is nil, cannot update container %s", newContainer.Name)
+		klog.Warningf("[Reconciler] deploy is nil, cannot update container %s", newContainer.Name)
 		return deploy
 	}
 	spec := &deploy.Spec.Template.Spec
@@ -35,7 +35,7 @@ func deployWithContainerUpdated(deploy *appsv1.Deployment, newContainer corev1.C
 
 func statefulsetWithContainerUpdated(sts *appsv1.StatefulSet, newContainer corev1.Container) *appsv1.StatefulSet {
 	if sts == nil {
-		klog.Warningf("statefulset is nil, cannot update container %s", newContainer.Name)
+		klog.Warningf("[Reconciler] statefulset is nil, cannot update container %s", newContainer.Name)
 		return sts
 	}
 	spec := &sts.Spec.Template.Spec
