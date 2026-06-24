@@ -1,14 +1,18 @@
 package utils
 
 import (
+	"sync"
+
 	"github.com/BuMaRen/mesh/pkg/api/mesh"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/klog/v2"
 )
 
 type Sidecar struct {
+	closed         bool
 	Name           string
 	SubServiceName string
+	informerMtx    *sync.Mutex
 	receiver       chan *mesh.ClientSubscriptionEvent
 }
 
@@ -18,6 +22,7 @@ func NewSidecar(name, subService string) *Sidecar {
 	return &Sidecar{
 		Name:           name,
 		SubServiceName: subService,
+		informerMtx:    &sync.Mutex{},
 		receiver:       make(chan *mesh.ClientSubscriptionEvent, channelCapacity),
 	}
 }
@@ -39,6 +44,12 @@ func (s *Sidecar) Informer(opType mesh.OpType, obj any) {
 		return
 	}
 	protoMsg := newClientSubscriptionEvent(opType, endpointSlice)
+	s.informerMtx.Lock()
+	defer s.informerMtx.Unlock()
+	if s.closed {
+		klog.Warningf("[Sidecar][Informer] sidecar %s is closed, skipping update for service %s", s.Name, svcName)
+		return
+	}
 	select {
 	case s.receiver <- protoMsg:
 		klog.Infof("[Sidecar][Informer] sent update for service %s to sidecar %s", svcName, s.Name)
@@ -50,6 +61,16 @@ func (s *Sidecar) Informer(opType mesh.OpType, obj any) {
 // Receiver 返回一个只读的 channel，供 sidecar 监听
 func (s *Sidecar) Receiver() <-chan *mesh.ClientSubscriptionEvent {
 	return s.receiver
+}
+
+func (s *Sidecar) Close() {
+	s.informerMtx.Lock()
+	defer s.informerMtx.Unlock()
+	if s.closed {
+		return
+	}
+	s.closed = true
+	close(s.receiver)
 }
 
 func newClientSubscriptionEvent(opType mesh.OpType, es *discoveryv1.EndpointSlice) *mesh.ClientSubscriptionEvent {
