@@ -2,6 +2,7 @@ package grpcserver
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -22,15 +23,14 @@ type SidecarInformer func(any)
 type GrpcServer struct {
 	listFn   func(string) (*discoveryv1.EndpointSlice, bool)
 	sidecars map[string]*utils.Sidecar
-	mtx      *sync.RWMutex
-	ready    atomic.Bool
+	mtx      *sync.Mutex
+	ready    *atomic.Bool
 	mesh.UnimplementedMeshCtrlServer
 }
 
 func (s *GrpcServer) GetSidecar(svcName string) *utils.Sidecar {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
-
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
 	for _, sidecar := range s.sidecars {
 		if sidecar.SubServiceName == svcName {
 			return sidecar
@@ -41,19 +41,28 @@ func (s *GrpcServer) GetSidecar(svcName string) *utils.Sidecar {
 
 // RPC:Subcribe sidecar 订阅某个 service 的 EndpointSlice 变化事件，服务端通过 channel 推送消息
 func (s *GrpcServer) Subscribe(sr *mesh.SubscriptionRequest, sss grpc.ServerStreamingServer[mesh.ClientSubscriptionEvent]) error {
+	if !s.ready.Load() {
+		klog.Warningf("[GrpcServer][Subscribe] server not ready, rejecting subscription from sidecar %s for service %s", sr.SidecarId, sr.ServiceName)
+		return fmt.Errorf("server not ready, please try again later")
+	}
 	serviceName := sr.ServiceName
 	sidecar := utils.NewSidecar(sr.SidecarId, serviceName)
-
 	klog.Infof("[GrpcServer][Subscribe] sidecar %s subscribed to service %s", sr.SidecarId, serviceName)
 
 	// 订阅时先把当前的 EndpointSlice 发给 sidecar，确保 sidecar 能尽快拿到数据
-	es, exist := s.listFn(serviceName)
-	if exist {
+	if es, exist := s.listFn(serviceName); exist {
 		klog.Infof("[GrpcServer][Subscribe] sending current EndpointSlice for service %s to sidecar %s", serviceName, sr.SidecarId)
 		sidecar.Informer(mesh.OpType_ADDED, es)
 	}
 
+	// 在锁内二次检查 ready 并插入 map，与 shutdown goroutine 的 ready.Store(false)+Close 互斥，
+	// 避免 sidecar 在 CloseReceivers 之后才入 map 导致 channel 永远不被关闭
 	s.mtx.Lock()
+	if !s.ready.Load() {
+		s.mtx.Unlock()
+		klog.Warningf("[GrpcServer][Subscribe] server not ready, rejecting subscription from sidecar %s for service %s", sr.SidecarId, sr.ServiceName)
+		return fmt.Errorf("server not ready, please try again later")
+	}
 	s.sidecars[sr.SidecarId] = sidecar
 	s.mtx.Unlock()
 
@@ -95,6 +104,19 @@ func (s *GrpcServer) ListenAndServe(ctx context.Context, opts *Options) error {
 
 	go func() {
 		<-ctx.Done()
+		s.mtx.Lock()
+
+		// 这之后不再允许新的 sidecar 订阅，防止在关闭过程中出现新的订阅
+		s.ready.Store(false)
+		receivers := []*utils.Sidecar{}
+		for _, sidecar := range s.sidecars {
+			receivers = append(receivers, sidecar)
+		}
+		for _, receiver := range receivers {
+			receiver.Close()
+		}
+
+		s.mtx.Unlock()
 		grpcServer.GracefulStop()
 	}()
 
@@ -107,6 +129,7 @@ func (s *GrpcServer) ListenAndServe(ctx context.Context, opts *Options) error {
 func NewGrpcServer() *GrpcServer {
 	return &GrpcServer{
 		sidecars: make(map[string]*utils.Sidecar, mapInitialSize),
-		mtx:      &sync.RWMutex{},
+		ready:    &atomic.Bool{},
+		mtx:      &sync.Mutex{},
 	}
 }
