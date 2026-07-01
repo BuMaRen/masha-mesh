@@ -7,6 +7,7 @@ import (
 )
 
 type ContainersCache struct {
+	// 暂时不需要修改成 RWMutex
 	mtx  sync.Mutex
 	ctns map[string]*Container
 }

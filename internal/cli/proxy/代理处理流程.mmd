@@ -1,0 +1,86 @@
+---
+references:
+  - "File: /internal/cli/proxy/server.go"
+  - "File: /internal/cli/proxy/options.go"
+  - "File: /internal/cli/proxy/listener.go"
+  - "File: /internal/cli/proxy/http_transport.go"
+generationTime: 2026-06-11T04:28:11.622Z
+---
+flowchart TD
+    Start(["Start Proxy"]) --> NewProxy["NewProxy()"]
+    NewProxy --> LoadCfg{{"LoadConfig()?"}}
+    LoadCfg -->|Error| RetErr1["Return Error"]
+    LoadCfg -->|Success| ChkHTTP{{"HTTP Enabled?"}}
+    ChkHTTP -->|Yes| NewBrk["Create Breaker"]
+    ChkHTTP -->|No| SkipBrk["Breaker = nil"]
+    NewBrk --> NewLis["NewListener()"]
+    SkipBrk --> NewLis
+    NewLis --> RetProxy["Return Proxy Instance"]
+    RetProxy --> Run["Run()"]
+    Run --> Listen["listener.Listen()"]
+    Listen --> Loop{{"Accept Connection"}}
+    Loop -->|Context Done| RetCtx["Return nil"]
+    Loop -->|Accept Error| LogErr1["Log Error"]
+    LogErr1 --> Loop
+    Loop -->|Success| HandleConn["handleConnection()"]
+    HandleConn --> IsHTTP{{"Is HTTP?"}}
+    IsHTTP -->|Yes| HandleHTTP["handleHTTP()"]
+    IsHTTP -->|No| HandleTCP["handleTCP()"]
+    
+    HandleHTTP --> ParseReq["Parse HTTP Request"]
+    ParseReq --> ParseHost["parseHost()"]
+    ParseHost --> CheckIP{{"Is IP Address?"}}
+    CheckIP -->|Yes| PassThru1["Pass Through to DefaultTransport"]
+    CheckIP -->|No| ChkCfg{{"HTTP Config Enabled?"}}
+    ChkCfg -->|No| PassThru2["Pass Through to DefaultTransport"]
+    ChkCfg -->|Yes| ChkRule{{"Has Proxy Rule?"}}
+    ChkRule -->|No| PassThru3["Pass Through to DefaultTransport"]
+    ChkRule -->|Yes| ChkLB{{"Load Balance Enabled?"}}
+    ChkLB -->|No| PassThru4["Pass Through to DefaultTransport"]
+    ChkLB -->|Yes| LoadBal["loadBalance()"]
+    LoadBal --> GetEP["getEndpoints(service)"]
+    GetEP --> LoopEP{{"For Each Endpoint"}}
+    LoopEP -->|Check Breaker| ChkBrk{{"Breaker Allowed?"}}
+    ChkBrk -->|No| SkipEP["Skip Endpoint"]
+    ChkBrk -->|Yes| SendReq["sendRequest()"]
+    SendReq --> ChkResp{{"Response OK?"}}
+    ChkResp -->|5xx Error| RecordFail["recordFailure()"]
+    RecordFail --> SkipEP
+    ChkResp -->|Success| RecordSuc["RecordSuccess()"]
+    RecordSuc --> RetResp["Return Response"]
+    SkipEP --> LoopEP
+    LoopEP -->|All Failed| RetAllFail["Return Error"]
+    PassThru1 --> HTTPResp["HTTP Response"]
+    PassThru2 --> HTTPResp
+    PassThru3 --> HTTPResp
+    PassThru4 --> HTTPResp
+    RetResp --> HTTPResp
+    RetAllFail --> HTTPResp
+    
+    HandleTCP --> GetOrgDst["getOriginalDst()"]
+    GetOrgDst --> ChkDst{{"Valid Destination?"}}
+    ChkDst -->|Error| LogErr2["Log Error"]
+    LogErr2 --> CloseTCP["Close Connection"]
+    ChkDst -->|Success| DialTgt["Dial Target"]
+    DialTgt --> ChkDial{{"Dial Success?"}}
+    ChkDial -->|Error| LogErr3["Log Error"]
+    LogErr3 --> CloseTCP
+    ChkDial -->|Success| BiDir["Bidirectional Copy"]
+    BiDir --> CopyC2T["Copy Client to Target"]
+    BiDir --> CopyT2C["Copy Target to Client"]
+    CopyC2T --> WaitAll["Wait for Both"]
+    CopyT2C --> WaitAll
+    WaitAll --> CloseTCP
+    CloseTCP --> End1(["Connection Closed"])
+    RetCtx --> End2(["Proxy Stopped"])
+    HTTPResp --> End3(["HTTP Response Sent"])
+    
+    classDef decision fill:#fff4e6,stroke:#ff9800,stroke-width:2px
+    classDef process fill:#e8f5e9,stroke:#4caf50,stroke-width:2px
+    classDef endpoint fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
+    classDef error fill:#ffebee,stroke:#f44336,stroke-width:2px
+    
+    class LoadCfg,ChkHTTP,Loop,IsHTTP,CheckIP,ChkCfg,ChkRule,ChkLB,LoopEP,ChkBrk,ChkResp,ChkDst,ChkDial decision
+    class NewProxy,NewBrk,SkipBrk,NewLis,HandleConn,ParseReq,GetEP,SendReq,GetOrgDst,BiDir process
+    class Start,End1,End2,End3 endpoint
+    class RetErr1,LogErr1,LogErr2,LogErr3,CloseTCP error
