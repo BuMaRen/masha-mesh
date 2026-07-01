@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 )
 
@@ -18,6 +19,7 @@ type CustomResourcesReconciler struct {
 	kv         *cache.GeneralCache[*corev1.Container]
 	kubeClient kubernetes.Interface
 	label      string
+	workQueue  workqueue.TypedRateLimitingInterface[string]
 }
 
 // reconciler 的职责：

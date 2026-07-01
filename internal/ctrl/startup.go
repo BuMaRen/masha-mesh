@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/BuMaRen/mesh/internal/ctrl/grpcserver"
-	"github.com/BuMaRen/mesh/internal/ctrl/handlers"
+	"github.com/BuMaRen/mesh/internal/ctrl/hooks"
 	rc "github.com/BuMaRen/mesh/internal/ctrl/reconciler"
+	"github.com/BuMaRen/mesh/internal/ctrl/worker"
 	"github.com/BuMaRen/mesh/internal/resources"
 	"github.com/BuMaRen/mesh/pkg/cache"
 	"github.com/BuMaRen/mesh/pkg/metrics"
@@ -32,7 +33,8 @@ func StartUp(rootContext context.Context, opts *StartUpOptions) {
 	dynamicClient := utils.NewDynamicClientOrDie()
 
 	endpointsliceReconciler := rc.NewEndpointSliceReconciler(epsCache, distributer)
-	customResourcesReconciler := rc.NewCustomResourcesReconciler(containerCache, opts.label, k8sClient)
+	crdWorker := worker.NewCRDWorker(containerCache, opts.label, k8sClient, opts.crdWorkerMaxRetries)
+	crdHandlers := crdWorker.Handlers()
 
 	stopCh := make(chan struct{})
 	ctx, cancel := context.WithCancel(rootContext)
@@ -42,23 +44,23 @@ func StartUp(rootContext context.Context, opts *StartUpOptions) {
 	metrics.MustRegister()
 	httpSvr.RegisterHandler("/prometheus", promhttp.Handler())
 	// 处理 preStop 请求，通知 sidecar 进行预停止准备
-	httpSvr.RegisterHandler("/preStop", handlers.NewPreStopHandler(stopCh))
+	httpSvr.RegisterHandler("/preStop", hooks.NewPreStopHandler(stopCh))
 	// 处理 mutate 请求，进行注入逻辑
-	httpSvr.RegisterHandler("/mutate", handlers.NewMutateHandler(containerCache, opts.label))
+	httpSvr.RegisterHandler("/mutate", hooks.NewMutateHandler(containerCache, opts.label))
 	// readyz：聚合 gRPC 服务器 + kube-client 的就绪状态供 Kubernetes readinessProbe 调用
-	httpSvr.RegisterHandler("/readyz", handlers.NewReadyzHandler(
+	httpSvr.RegisterHandler("/readyz", hooks.NewReadyzHandler(
 		5*time.Second,
-		handlers.NewGrpcServerChecker(grpcSvr.IsReady),
-		handlers.NewKubeClientChecker(k8sClient),
-		handlers.NewDynamicClientChecker(dynamicClient, schema.GroupVersionResource{
+		hooks.NewGrpcServerChecker(grpcSvr.IsReady),
+		hooks.NewKubeClientChecker(k8sClient),
+		hooks.NewDynamicClientChecker(dynamicClient, schema.GroupVersionResource{
 			Group:    opts.gvrGroup,
 			Version:  opts.gvrVersion,
 			Resource: opts.gvrResource,
 		}),
 	))
-	httpSvr.RegisterHandler("/healthz", handlers.NewHealthzHandler(
+	httpSvr.RegisterHandler("/healthz", hooks.NewHealthzHandler(
 		5*time.Second,
-		handlers.NewDefaultHealthChecker("default-healthz"),
+		hooks.NewDefaultHealthChecker("default-healthz"),
 	))
 	wg.Add(1)
 	go func() {
@@ -82,14 +84,21 @@ func StartUp(rootContext context.Context, opts *StartUpOptions) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		crdWorker.Run(ctx, 1)
+	}()
+
+	// 监听 CRD 事件并交给 CRDHandlers 更新缓存和入队。
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		WatchCRD(ctx, dynamicClient, schema.GroupVersionResource{
 			Group:    opts.gvrGroup,
 			Version:  opts.gvrVersion,
 			Resource: opts.gvrResource,
 		}, k8Cache.ResourceEventHandlerFuncs{
-			AddFunc:    customResourcesReconciler.OnAdded,
-			UpdateFunc: customResourcesReconciler.OnUpdated,
-			DeleteFunc: customResourcesReconciler.OnDeleted,
+			AddFunc:    crdHandlers.OnAdded,
+			UpdateFunc: crdHandlers.OnUpdated,
+			DeleteFunc: crdHandlers.OnDeleted,
 		})
 	}()
 

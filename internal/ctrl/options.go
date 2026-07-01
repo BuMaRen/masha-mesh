@@ -10,6 +10,7 @@ type StartUpOptions struct {
 	gvrVersion              string
 	gvrGroup                string
 	gvrResource             string
+	crdWorkerMaxRetries     int
 	grpcOptions             *grpcserver.Options
 	certFile                string
 	keyFile                 string
@@ -19,7 +20,8 @@ type StartUpOptions struct {
 
 func NewStartUpOptions() *StartUpOptions {
 	return &StartUpOptions{
-		grpcOptions: grpcserver.NewOptions(),
+		grpcOptions:         grpcserver.NewOptions(),
+		crdWorkerMaxRetries: -1,
 	}
 }
 
@@ -29,6 +31,7 @@ func (o *StartUpOptions) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.gvrVersion, "gvr-version", "v1", "Version of the GVR to watch")
 	cmd.Flags().StringVar(&o.gvrGroup, "gvr-group", "masha.io", "Group of the GVR to watch")
 	cmd.Flags().StringVar(&o.gvrResource, "gvr-resource", "containers", "Resource of the GVR to watch")
+	cmd.Flags().IntVar(&o.crdWorkerMaxRetries, "crd-worker-max-retries", o.crdWorkerMaxRetries, "Maximum retry attempts for CRD worker per key; -1 means unlimited retries")
 	cmd.Flags().StringVar(&o.certFile, "cert-file", "", "File containing the certificate for TLS")
 	cmd.Flags().StringVar(&o.keyFile, "key-file", "", "File containing the key for TLS")
 	cmd.Flags().StringVar(&o.address, "address", ":443", "Address to listen on")

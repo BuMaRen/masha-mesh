@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BuMaRen/mesh/internal/ctrl/handlers"
+	"github.com/BuMaRen/mesh/internal/ctrl/hooks"
 )
 
 func TestHttpsServer(t *testing.T) {
@@ -42,7 +42,7 @@ func TestHttpsServer(t *testing.T) {
 
 		stopCh := make(chan struct{})
 		httpSvr := NewHttpsServer(opts)
-		httpSvr.RegisterHandler("/preStop", handlers.NewPreStopHandler(stopCh))
+		httpSvr.RegisterHandler("/preStop", hooks.NewPreStopHandler(stopCh))
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
