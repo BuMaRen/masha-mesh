@@ -11,6 +11,14 @@ type Breaker struct {
 	breakers map[string]*subBreaker
 }
 
+func NewBreaker(opts *Options) *Breaker {
+	return &Breaker{
+		mtx:      &sync.RWMutex{},
+		opts:     opts,
+		breakers: make(map[string]*subBreaker),
+	}
+}
+
 func (b *Breaker) Allowed(key string) bool {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()

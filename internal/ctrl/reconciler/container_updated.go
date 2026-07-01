@@ -1,8 +1,13 @@
 package reconciler
 
 import (
+	"context"
+	"time"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 )
 
@@ -19,7 +24,7 @@ func containersWithOneUpdated(containers []corev1.Container, newContainer corev1
 
 func deployWithContainerUpdated(deploy *appsv1.Deployment, newContainer corev1.Container) *appsv1.Deployment {
 	if deploy == nil {
-		klog.Warningf("deploy is nil, cannot update container %s", newContainer.Name)
+		klog.Warningf("[Reconciler] deploy is nil, cannot update container %s", newContainer.Name)
 		return deploy
 	}
 	spec := &deploy.Spec.Template.Spec
@@ -30,11 +35,25 @@ func deployWithContainerUpdated(deploy *appsv1.Deployment, newContainer corev1.C
 
 func statefulsetWithContainerUpdated(sts *appsv1.StatefulSet, newContainer corev1.Container) *appsv1.StatefulSet {
 	if sts == nil {
-		klog.Warningf("statefulset is nil, cannot update container %s", newContainer.Name)
+		klog.Warningf("[Reconciler] statefulset is nil, cannot update container %s", newContainer.Name)
 		return sts
 	}
 	spec := &sts.Spec.Template.Spec
 	spec.InitContainers = containersWithOneUpdated(spec.InitContainers, newContainer)
 	spec.Containers = containersWithOneUpdated(spec.Containers, newContainer)
 	return sts
+}
+
+func updateDeployment(kubeClient kubernetes.Interface, dep *appsv1.Deployment) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := kubeClient.AppsV1().Deployments(dep.Namespace).Update(ctx, dep, metav1.UpdateOptions{})
+	return err
+}
+
+func updateStatefulSet(kubeClient kubernetes.Interface, sts *appsv1.StatefulSet) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := kubeClient.AppsV1().StatefulSets(sts.Namespace).Update(ctx, sts, metav1.UpdateOptions{})
+	return err
 }

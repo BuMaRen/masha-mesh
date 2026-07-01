@@ -45,12 +45,13 @@ spec:
       labels:
         app: mesh-ctrl
     spec:
+      terminationGracePeriodSeconds: 30
       serviceAccountName: mesh-ctrl
       containers:
       - name: mesh-ctrl
         image: hjmasha/mesh-ctrl:t0.1.9
         command: ["/app/mesh-ctrl"]
-        args: ["--cert-file", "/etc/webhook/certs/tls.crt", "--key-file", "/etc/webhook/certs/tls.key", "--grpc-address", ":50051", "--grpc-network", "tcp", "--gvr-group", "masha.io", "--gvr-version", "v1", "--gvr-resource", "containers", "--injection-label", "masha.io/injection", "--metrics-address", ":9090", "--namespace", "default", "--pod-name", "test-pod", "--webhook-address", ":443"]
+        args: ["--cert-file", "/etc/webhook/certs/tls.crt", "--key-file", "/etc/webhook/certs/tls.key", "--address", ":443", "--grpc-address", ":50051", "--grpc-network", "tcp", "--gvr-group", "masha.io", "--gvr-version", "v1", "--gvr-resource", "containers", "--label", "masha.io/injection"]
         resources:
           limits:
             memory: "128Mi"
@@ -63,6 +64,22 @@ spec:
           name: grpc-port
         - containerPort: 443
           name: webhook-port
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/app/mesh-ctrl", "shutdown", "--address", ":443", "--cert-file", "/etc/webhook/certs/tls.crt"]
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 443
+            scheme: HTTPS
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 443
+            scheme: HTTPS
+          timeoutSeconds: 5
         env:
         - name: POD_NAME
           valueFrom:

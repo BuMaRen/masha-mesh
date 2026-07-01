@@ -1,0 +1,27 @@
+flowchart TD
+    A["apiserver 请求 /mutate（failurePolicy: Fail）"] --> B["mutateHandler"]
+
+    B --> C{"AdmissionReview 解析成功?"}
+    C -- 否 --> C1["返回 400，Response 不正常，拒绝创建（不管failurePolicy）"]
+    C -- 是 --> D["getPodFromAdmissionReview"]
+
+    D --> E{"admissionReview / Request / Raw 是否有效?"}
+    E -- 否 --> E1["返回 400，Response 不正常，拒绝创建（不管failurePolicy）"]
+    E -- 是 --> F["解析得到 Pod"]
+
+    F --> G["needInjected"]
+    G --> H{"label 是否存在?"}
+    H -- 否 --> H1["返回 200 + AdmissionReview(Response=true) 放行"]
+    H -- 是 --> I["提取 labelValue 作为 containerName"]
+
+    I --> J["containerInjected"]
+    J --> K{"同名 container 是否已存在?"}
+    K -- 是 --> K1["返回 200 + AdmissionReview(Response=true) 放行"]
+    K -- 否 --> L{"cache 中是否存在 container?"}
+
+    L -- 是 --> M["responsePatch"]
+    M --> N{"patch 生成成功?"}
+    N -- 是 --> N1["返回 200 + AdmissionReview(Response=patch) 放行"]
+    N -- 否 --> N2["返回 200 + AdmissionReview(Response=false)，拒绝创建（按failurePolicy）"]
+
+    L -- 否 --> O["返回 200 + AdmissionReview(Response=false)，拒绝创建（按failurePolicy）"]

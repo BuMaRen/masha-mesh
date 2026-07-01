@@ -4,6 +4,9 @@ metadata:
   name: webhook-config
 webhooks:
   - name: webhook.example.com
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: "default"
     clientConfig:
       service:
         name: mesh-ctrl
@@ -16,7 +19,8 @@ webhooks:
         apiGroups: [""]
         apiVersions: ["v1"]
         resources: ["pods"]
+        scope: "Namespaced"
     admissionReviewVersions: ["v1"]
     sideEffects: None
-    failurePolicy: Ignore
+    failurePolicy: Fail
     timeoutSeconds: 10

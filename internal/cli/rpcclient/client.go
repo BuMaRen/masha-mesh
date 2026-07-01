@@ -12,7 +12,7 @@ import (
 func NewRpcClient(remote string) mesh.MeshCtrlClient {
 	c, err := grpc.NewClient(remote, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		klog.Error("Failed to create gRPC client: ", err)
+		klog.Errorf("[RpcClient] failed to create gRPC client: %v", err)
 		panic(err)
 	}
 	return mesh.NewMeshCtrlClient(c)
@@ -38,7 +38,7 @@ func NewMeshClient(serviceCache *ServiceCache, opts *Options) *MeshClient {
 func (c *MeshClient) Connect() {
 	grpcConn, err := grpc.NewClient(c.remote, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		klog.Error("Failed to create gRPC client: ", err)
+		klog.Errorf("[RpcClient] failed to create gRPC client: %v", err)
 		panic(err)
 	}
 	c.connection = grpcConn
@@ -59,27 +59,27 @@ func (c *MeshClient) Subscribe(ctx context.Context, serviceName string) error {
 	}
 	stream, err := c.grpcClient.Subscribe(ctx, subReq)
 	if err != nil {
-		klog.Error("Failed to subscribe to events: ", err)
+		klog.Errorf("[RpcClient] failed to subscribe to events: %v", err)
 		return err
 	}
 	go func() {
-		klog.Info("Subscribed to events successfully, waiting for events...")
+		klog.Infof("[RpcClient] subscribed to service %s, waiting for events...", serviceName)
 		for {
 			event, err := stream.Recv()
 			if err != nil {
-				klog.Error("Failed to receive event: ", err)
+				klog.Errorf("[RpcClient] failed to receive event for service %s: %v", serviceName, err)
 				return
 			}
-			klog.Infof("Received event: %+v\n", event)
+			klog.V(4).Infof("[RpcClient] received event for service %s: %+v", serviceName, event)
 			switch event.GetOpType() {
 			case mesh.OpType_ADDED:
-				klog.Info("Receive a service-add event\n")
+				klog.Infof("[RpcClient] [%s] service-add event", serviceName)
 				c.serviceCache.onAdd(serviceName, (*Endpoints)(event))
 			case mesh.OpType_MODIFIED:
-				klog.Info("Receive a service-modify event\n")
+				klog.Infof("[RpcClient] [%s] service-modify event", serviceName)
 				c.serviceCache.onUpdate(serviceName, (*Endpoints)(event))
 			case mesh.OpType_DELETED:
-				klog.Info("Receive a service-delete event\n")
+				klog.Infof("[RpcClient] [%s] service-delete event", serviceName)
 				c.serviceCache.onDelete(serviceName)
 			}
 		}

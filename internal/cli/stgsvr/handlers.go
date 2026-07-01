@@ -71,7 +71,7 @@ func (s *Server) subscribe(parent context.Context, serviceName string) error {
 func (s *Server) unsubscribe(serviceName string) error {
 	cancel, existed := s.svcContext.GetCancel(serviceName)
 	if !existed {
-		klog.Errorf("service %v not found", serviceName)
+		klog.Warningf("[StgSvr] service %s not found", serviceName)
 		return fmt.Errorf("service %v not found", serviceName)
 	}
 	cancel()
