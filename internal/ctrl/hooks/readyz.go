@@ -114,3 +114,24 @@ func (c *GrpcServerChecker) Check(_ context.Context) error {
 	}
 	return nil
 }
+
+// PrometheusChecker 检查 prometheus 是否正常
+type PrometheusChecker struct {
+	readyFn func() bool
+}
+
+func NewPrometheusChecker(readyFn func() bool) ReadinessChecker {
+	if readyFn == nil {
+		return &PrometheusChecker{readyFn: func() bool { return true }}
+	}
+	return &PrometheusChecker{readyFn: readyFn}
+}
+
+func (c *PrometheusChecker) Name() string { return "prometheus" }
+
+func (c *PrometheusChecker) Check(_ context.Context) error {
+	if !c.readyFn() {
+		return fmt.Errorf("prometheus server is not yet listening")
+	}
+	return nil
+}
