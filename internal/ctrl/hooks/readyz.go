@@ -114,3 +114,21 @@ func (c *GrpcServerChecker) Check(_ context.Context) error {
 	}
 	return nil
 }
+
+// MetricsServerChecker 检查 metrics-server 是否已开始接受连接
+type MetricsServerChecker struct {
+	readyFn func() bool
+}
+
+func NewMetricsServerChecker(readyFn func() bool) ReadinessChecker {
+	return &MetricsServerChecker{readyFn: readyFn}
+}
+
+func (c *MetricsServerChecker) Name() string { return "metrics-server" }
+
+func (c *MetricsServerChecker) Check(_ context.Context) error {
+	if !c.readyFn() {
+		return fmt.Errorf("metrics server is not yet listening")
+	}
+	return nil
+}

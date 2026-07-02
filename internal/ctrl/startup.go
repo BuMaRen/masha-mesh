@@ -57,6 +57,8 @@ func StartUp(rootContext context.Context, opts *StartUpOptions) {
 			Version:  opts.gvrVersion,
 			Resource: opts.gvrResource,
 		}),
+		// note: Prometheus 使用 pull 模式，因此这里直接返回 true
+		hooks.NewMetricsServerChecker(func() bool { return true }),
 	))
 	httpSvr.RegisterHandler("/healthz", hooks.NewHealthzHandler(
 		5*time.Second,
