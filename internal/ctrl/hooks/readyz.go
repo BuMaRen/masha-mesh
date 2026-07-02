@@ -115,20 +115,23 @@ func (c *GrpcServerChecker) Check(_ context.Context) error {
 	return nil
 }
 
-// MetricsServerChecker 检查 metrics-server 是否已开始接受连接
-type MetricsServerChecker struct {
+// PrometheusChecker 检查 prometheus 是否正常
+type PrometheusChecker struct {
 	readyFn func() bool
 }
 
-func NewMetricsServerChecker(readyFn func() bool) ReadinessChecker {
-	return &MetricsServerChecker{readyFn: readyFn}
+func NewPrometheusChecker(readyFn func() bool) ReadinessChecker {
+	if readyFn == nil {
+		return &PrometheusChecker{readyFn: func() bool { return true }}
+	}
+	return &PrometheusChecker{readyFn: readyFn}
 }
 
-func (c *MetricsServerChecker) Name() string { return "metrics-server" }
+func (c *PrometheusChecker) Name() string { return "prometheus" }
 
-func (c *MetricsServerChecker) Check(_ context.Context) error {
+func (c *PrometheusChecker) Check(_ context.Context) error {
 	if !c.readyFn() {
-		return fmt.Errorf("metrics server is not yet listening")
+		return fmt.Errorf("prometheus server is not yet listening")
 	}
 	return nil
 }
