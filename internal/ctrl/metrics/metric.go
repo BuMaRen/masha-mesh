@@ -6,6 +6,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// GaugeOpts 仪表盘/瞬时值
+// CounterOpts 计数器/累积值
+// HistogramOpts 直方图/分布值
+
 var (
 	registerMetricsOnce sync.Once
 
@@ -110,6 +114,13 @@ var (
 		Name:      "reconcile_duration_seconds",
 		Help:      "Duration of reconcile operations in seconds.",
 	})
+
+	ReconcileFailureTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "default",
+		Subsystem: "mesh_ctrl",
+		Name:      "reconcile_failure_total",
+		Help:      "Total number of reconcile failures.",
+	}, []string{"reconciler", "reason"})
 )
 
 // MustRegister 在进程启动阶段调用一次即可，用于把所有指标注册到默认 registry。
@@ -130,6 +141,7 @@ func MustRegister() {
 			SideCarsConnected,
 			SubscriptionEventsTotal,
 			ReconcileDurationSeconds,
+			ReconcileFailureTotal,
 		)
 	})
 }

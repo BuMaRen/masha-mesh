@@ -6,9 +6,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/BuMaRen/mesh/internal/ctrl/metrics"
 	"github.com/BuMaRen/mesh/internal/ctrl/utils"
 	"github.com/BuMaRen/mesh/pkg/api/mesh"
-	"github.com/BuMaRen/mesh/pkg/metrics"
 	pubutils "github.com/BuMaRen/mesh/pkg/utils"
 	"google.golang.org/grpc"
 	discoveryv1 "k8s.io/api/discovery/v1"
