@@ -7,11 +7,11 @@ import (
 
 	"github.com/BuMaRen/mesh/internal/ctrl/grpcserver"
 	"github.com/BuMaRen/mesh/internal/ctrl/hooks"
-	rc "github.com/BuMaRen/mesh/internal/ctrl/reconciler"
+	"github.com/BuMaRen/mesh/internal/ctrl/metrics"
+	"github.com/BuMaRen/mesh/internal/ctrl/reconciler"
 	"github.com/BuMaRen/mesh/internal/ctrl/worker"
 	"github.com/BuMaRen/mesh/internal/resources"
 	"github.com/BuMaRen/mesh/pkg/cache"
-	"github.com/BuMaRen/mesh/pkg/metrics"
 	"github.com/BuMaRen/mesh/pkg/utils"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -22,6 +22,8 @@ import (
 )
 
 func StartUp(rootContext context.Context, opts *StartUpOptions) {
+	metrics.MustRegister()
+
 	httpSvr := NewHttpsServer(opts)
 	grpcSvr := grpcserver.NewGrpcServer()
 	distributer := grpcSvr.Distributer()
@@ -32,7 +34,7 @@ func StartUp(rootContext context.Context, opts *StartUpOptions) {
 	k8sClient := utils.NewKubernetesClientOrDie()
 	dynamicClient := utils.NewDynamicClientOrDie()
 
-	endpointsliceReconciler := rc.NewEndpointSliceReconciler(epsCache, distributer)
+	endpointsliceReconciler := reconciler.NewEndpointSliceReconciler(epsCache, distributer)
 	crdWorker := worker.NewCRDWorker(containerCache, opts.label, k8sClient, opts.crdWorkerMaxRetries)
 	crdHandlers := crdWorker.Handlers()
 
@@ -41,7 +43,6 @@ func StartUp(rootContext context.Context, opts *StartUpOptions) {
 	defer cancel()
 	wg := sync.WaitGroup{}
 
-	metrics.MustRegister()
 	httpSvr.RegisterHandler("/prometheus", promhttp.Handler())
 	// 处理 preStop 请求，通知 sidecar 进行预停止准备
 	httpSvr.RegisterHandler("/preStop", hooks.NewPreStopHandler(stopCh))

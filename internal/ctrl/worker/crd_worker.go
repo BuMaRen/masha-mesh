@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BuMaRen/mesh/internal/ctrl/metrics"
 	"github.com/BuMaRen/mesh/pkg/cache"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -184,34 +185,54 @@ func (w *CRDWorker) reconcileDelete(containerName, namespace string) error {
 
 // --- Kubernetes API helpers ---
 
+const (
+	update_stss_failed = "update statefulsets failed"
+	update_deps_failed = "update deployments failed"
+	list_stss_failed   = "list statefulsets failed"
+	list_deps_failed   = "list deployments failed"
+)
+
 func (w *CRDWorker) listDeployments(namespace string) (*appsv1.DeploymentList, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return w.kubeClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{
+	dep, err := w.kubeClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: metav1.FormatLabelSelector(&metav1.LabelSelector{
 			MatchExpressions: []metav1.LabelSelectorRequirement{
 				{Key: w.label, Operator: metav1.LabelSelectorOpExists},
 			},
 		}),
 	})
+	if err != nil {
+		metrics.ReconcileFailureTotal.WithLabelValues("crd-worker", list_deps_failed).Inc()
+		return nil, err
+	}
+	return dep, nil
 }
 
 func (w *CRDWorker) listStatefulSets(namespace string) (*appsv1.StatefulSetList, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return w.kubeClient.AppsV1().StatefulSets(namespace).List(ctx, metav1.ListOptions{
+	sts, err := w.kubeClient.AppsV1().StatefulSets(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: metav1.FormatLabelSelector(&metav1.LabelSelector{
 			MatchExpressions: []metav1.LabelSelectorRequirement{
 				{Key: w.label, Operator: metav1.LabelSelectorOpExists},
 			},
 		}),
 	})
+	if err != nil {
+		metrics.ReconcileFailureTotal.WithLabelValues("crd-worker", list_stss_failed).Inc()
+		return nil, err
+	}
+	return sts, nil
 }
 
 func (w *CRDWorker) updateDeployment(dep *appsv1.Deployment) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := w.kubeClient.AppsV1().Deployments(dep.Namespace).Update(ctx, dep, metav1.UpdateOptions{})
+	if err != nil {
+		metrics.ReconcileFailureTotal.WithLabelValues("crd-worker", update_deps_failed).Inc()
+	}
 	return err
 }
 
@@ -219,6 +240,9 @@ func (w *CRDWorker) updateStatefulSet(sts *appsv1.StatefulSet) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := w.kubeClient.AppsV1().StatefulSets(sts.Namespace).Update(ctx, sts, metav1.UpdateOptions{})
+	if err != nil {
+		metrics.ReconcileFailureTotal.WithLabelValues("crd-worker", update_stss_failed).Inc()
+	}
 	return err
 }
 
