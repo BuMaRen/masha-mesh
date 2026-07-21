@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -88,12 +87,15 @@ func (w *CRDWorker) process(key string) {
 	}
 
 	if err := w.processEvent(event); err != nil {
-		if w.shouldRetry(key) {
+		if !errors.Is(err, RetryableError) {
+			klog.Errorf("[CRDWorker] dropping %q, non-retryable error: %v", key, err)
+		} else if w.shouldRetry(key) {
 			klog.Errorf("[CRDWorker] error processing %q, enqueue with exponential backoff: %v", key, err)
 			w.queue.AddRateLimited(key)
 			return
+		} else {
+			klog.Errorf("[CRDWorker] dropping %q after %d retries: %v", key, w.maxRetries, err)
 		}
-		klog.Errorf("[CRDWorker] dropping %q after %d retries: %v", key, w.maxRetries, err)
 	}
 	w.queue.Forget(key)
 }
@@ -132,23 +134,23 @@ func (w *CRDWorker) reconcileUpdate(containerName, namespace string) error {
 
 	deployments, err := w.listDeployments(namespace)
 	if err != nil {
-		return fmt.Errorf("list deployments in namespace %s: %w", namespace, err)
+		return NewProcessError(true, "list deployments in namespace %s: %s", namespace, err.Error())
 	}
 	for i := range deployments.Items {
 		updated := deployWithContainerUpdated(&deployments.Items[i], *container)
 		if err := w.updateDeployment(updated); err != nil {
-			errs = append(errs, fmt.Errorf("update deployment %s/%s: %w", updated.Namespace, updated.Name, err))
+			errs = append(errs, NewProcessError(true, "update deployment %s/%s: %s", updated.Namespace, updated.Name, err.Error()))
 		}
 	}
 
 	statefulSets, err := w.listStatefulSets(namespace)
 	if err != nil {
-		return fmt.Errorf("list statefulsets in namespace %s: %w", namespace, err)
+		return NewProcessError(true, "list statefulsets in namespace %s: %s", namespace, err.Error())
 	}
 	for i := range statefulSets.Items {
 		updated := statefulsetWithContainerUpdated(&statefulSets.Items[i], *container)
 		if err := w.updateStatefulSet(updated); err != nil {
-			errs = append(errs, fmt.Errorf("update statefulset %s/%s: %w", updated.Namespace, updated.Name, err))
+			errs = append(errs, NewProcessError(true, "update statefulset %s/%s: %s", updated.Namespace, updated.Name, err.Error()))
 		}
 	}
 
@@ -160,23 +162,23 @@ func (w *CRDWorker) reconcileDelete(containerName, namespace string) error {
 
 	deployments, err := w.listDeployments(namespace)
 	if err != nil {
-		return fmt.Errorf("list deployments in namespace %s: %w", namespace, err)
+		return NewProcessError(true, "list deployments in namespace %s: %s", namespace, err.Error())
 	}
 	for i := range deployments.Items {
 		updated := deployWithContainerRemoved(&deployments.Items[i], containerName)
 		if err := w.updateDeployment(updated); err != nil {
-			errs = append(errs, fmt.Errorf("update deployment %s/%s: %w", updated.Namespace, updated.Name, err))
+			errs = append(errs, NewProcessError(true, "update deployment %s/%s: %s", updated.Namespace, updated.Name, err.Error()))
 		}
 	}
 
 	statefulSets, err := w.listStatefulSets(namespace)
 	if err != nil {
-		return fmt.Errorf("list statefulsets in namespace %s: %w", namespace, err)
+		return NewProcessError(true, "list statefulsets in namespace %s: %s", namespace, err.Error())
 	}
 	for i := range statefulSets.Items {
 		updated := statefulsetWithContainerRemoved(&statefulSets.Items[i], containerName)
 		if err := w.updateStatefulSet(updated); err != nil {
-			errs = append(errs, fmt.Errorf("update statefulset %s/%s: %w", updated.Namespace, updated.Name, err))
+			errs = append(errs, NewProcessError(true, "update statefulset %s/%s: %s", updated.Namespace, updated.Name, err.Error()))
 		}
 	}
 
