@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -376,6 +377,101 @@ func TestCRDWorker_ProcessEvent_Delete(t *testing.T) {
 	}
 	if len(updated.Spec.Template.Spec.Containers) != 1 {
 		t.Errorf("expected 1 container remaining, got %d", len(updated.Spec.Template.Spec.Containers))
+	}
+}
+
+// --- TestCRDWorker_ReconcileUpdate/Delete error classification ---
+
+func TestCRDWorker_ReconcileUpdate_ListFailure_IsRetryable(t *testing.T) {
+	const namespace = "default"
+
+	fakeClient := fake.NewSimpleClientset()
+	fakeClient.Fake.PrependReactor("list", "deployments",
+		func(_ k8sTesting.Action) (bool, runtime.Object, error) {
+			return true, nil, fmt.Errorf("simulated list error")
+		},
+	)
+
+	c := cache.NewGeneralCache[*corev1.Container]()
+	c.Add("sidecar", &corev1.Container{Name: "sidecar", Image: "nginx:v2"})
+	w := newTestWorker(c, fakeClient)
+
+	err := w.reconcileUpdate("sidecar", namespace)
+	if err == nil {
+		t.Fatal("expected error when listing deployments fails")
+	}
+	if !errors.Is(err, RetryableError) {
+		t.Errorf("expected list failure to be classified as retryable, got: %v", err)
+	}
+}
+
+func TestCRDWorker_ReconcileUpdate_PartialUpdateFailure_AggregatesAsRetryable(t *testing.T) {
+	// Two Deployments and two StatefulSets; only one Update call of each fails.
+	// reconcileUpdate should still return an error, and errors.Is(err, RetryableError)
+	// should be true because at least one of the joined errors is retryable.
+	const (
+		namespace     = "default"
+		containerName = "sidecar"
+		label         = "mesh-inject"
+	)
+
+	depOK := makeDeployment("dep-ok", namespace, label, corev1.Container{Name: containerName, Image: "nginx:v1"})
+	depFail := makeDeployment("dep-fail", namespace, label, corev1.Container{Name: containerName, Image: "nginx:v1"})
+	fakeClient := fake.NewSimpleClientset(depOK, depFail)
+
+	fakeClient.Fake.PrependReactor("update", "deployments",
+		func(action k8sTesting.Action) (bool, runtime.Object, error) {
+			updateAction := action.(k8sTesting.UpdateAction)
+			dep := updateAction.GetObject().(*appsv1.Deployment)
+			if dep.Name == "dep-fail" {
+				return true, nil, fmt.Errorf("simulated update error")
+			}
+			return false, nil, nil
+		},
+	)
+
+	c := cache.NewGeneralCache[*corev1.Container]()
+	c.Add(containerName, &corev1.Container{Name: containerName, Image: "nginx:v2"})
+	w := newTestWorker(c, fakeClient)
+
+	err := w.reconcileUpdate(containerName, namespace)
+	if err == nil {
+		t.Fatal("expected aggregated error from partial update failure")
+	}
+	if !errors.Is(err, RetryableError) {
+		t.Errorf("expected aggregated error to be retryable, got: %v", err)
+	}
+
+	ctx := context.Background()
+	ok, getErr := fakeClient.AppsV1().Deployments(namespace).Get(ctx, "dep-ok", metav1.GetOptions{})
+	if getErr != nil {
+		t.Fatalf("failed to get dep-ok: %v", getErr)
+	}
+	if ok.Spec.Template.Spec.Containers[0].Image != "nginx:v2" {
+		t.Errorf("expected dep-ok to be updated despite dep-fail failing, got image %q",
+			ok.Spec.Template.Spec.Containers[0].Image)
+	}
+}
+
+func TestCRDWorker_ReconcileDelete_ListFailure_IsRetryable(t *testing.T) {
+	const namespace = "default"
+
+	fakeClient := fake.NewSimpleClientset()
+	fakeClient.Fake.PrependReactor("list", "statefulsets",
+		func(_ k8sTesting.Action) (bool, runtime.Object, error) {
+			return true, nil, fmt.Errorf("simulated list error")
+		},
+	)
+
+	c := cache.NewGeneralCache[*corev1.Container]()
+	w := newTestWorker(c, fakeClient)
+
+	err := w.reconcileDelete("sidecar", namespace)
+	if err == nil {
+		t.Fatal("expected error when listing statefulsets fails")
+	}
+	if !errors.Is(err, RetryableError) {
+		t.Errorf("expected list failure to be classified as retryable, got: %v", err)
 	}
 }
 

@@ -45,7 +45,7 @@ func (h *CRDHandlers) OnUpdated(_, newObj any) {
 	}
 	coreContainer := container.ToCoreV1Container()
 	if _, ok := h.cache.Update(coreContainer.Name, &coreContainer); !ok {
-		klog.Infof("[CRDHandlers] container %s not in cache, skipping update enqueue", coreContainer.Name)
+		klog.Warningf("[CRDHandlers] container %s not in cache, skipping update enqueue", coreContainer.Name)
 		return
 	}
 	h.enqueue(&CRDWorkerEvent{
@@ -63,7 +63,7 @@ func (h *CRDHandlers) OnDeleted(obj any) {
 	}
 	coreContainer := container.ToCoreV1Container()
 	if _, ok := h.cache.Delete(coreContainer.Name); !ok {
-		klog.Infof("[CRDHandlers] container %s not in cache, skipping delete enqueue", coreContainer.Name)
+		klog.Warningf("[CRDHandlers] container %s not in cache, skipping delete enqueue", coreContainer.Name)
 		return
 	}
 	h.enqueue(&CRDWorkerEvent{
